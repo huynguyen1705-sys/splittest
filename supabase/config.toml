@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.collect]
 verify_jwt = false
+
+[functions.aggregate-events]
+verify_jwt = false
