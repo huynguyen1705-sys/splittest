@@ -189,6 +189,87 @@ export function useDeleteCampaign() {
   });
 }
 
+export function useDuplicateCampaign() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ campaignId, projectId }: { campaignId: string; projectId: string }) => {
+      // Fetch original campaign with variants and rules
+      const { data: original, error: fetchError } = await supabase
+        .from('campaigns')
+        .select(`
+          *,
+          variants (*),
+          campaign_rules (*)
+        `)
+        .eq('id', campaignId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Create new campaign
+      const { data: newCampaign, error: campaignError } = await supabase
+        .from('campaigns')
+        .insert({
+          project_id: projectId,
+          name: `${original.name} (Copy)`,
+          status: 'draft',
+          sticky_enabled: original.sticky_enabled,
+          respect_dnt: original.respect_dnt,
+          priority: original.priority,
+        })
+        .select()
+        .single();
+
+      if (campaignError) throw campaignError;
+
+      // Copy variants
+      if (original.variants && original.variants.length > 0) {
+        const { error: variantsError } = await supabase
+          .from('variants')
+          .insert(
+            original.variants.map((v: any) => ({
+              campaign_id: newCampaign.id,
+              name: v.name,
+              destination_url: v.destination_url,
+              weight: v.weight,
+              is_control: v.is_control,
+            }))
+          );
+
+        if (variantsError) throw variantsError;
+      }
+
+      // Copy rules
+      if (original.campaign_rules) {
+        const rules = original.campaign_rules;
+        const { error: rulesError } = await supabase
+          .from('campaign_rules')
+          .insert({
+            campaign_id: newCampaign.id,
+            country_in: rules.country_in || [],
+            device_in: rules.device_in || [],
+            browser_in: rules.browser_in || [],
+            os_in: rules.os_in || [],
+            lang_in: rules.lang_in || [],
+            include_paths: rules.include_paths || [],
+          });
+
+        if (rulesError) throw rulesError;
+      }
+
+      return newCampaign;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns', data.project_id] });
+      toast.success('Campaign duplicated successfully');
+    },
+    onError: (error) => {
+      toast.error('Failed to duplicate campaign: ' + error.message);
+    },
+  });
+}
+
 export function useUpdateVariants() {
   const queryClient = useQueryClient();
 
