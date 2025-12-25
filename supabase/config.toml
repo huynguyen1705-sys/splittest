@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.cleanup-data]
 verify_jwt = false
+
+[functions.validate-snippet]
+verify_jwt = false

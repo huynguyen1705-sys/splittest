@@ -19,9 +19,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, Plus, Settings, Code, BarChart3, Play, Pause, CheckCircle, MoreVertical, Trash2, Pencil, Copy } from 'lucide-react';
+import { ArrowLeft, Plus, Settings, Code, BarChart3, Play, Pause, CheckCircle, MoreVertical, Trash2, Pencil, Copy, CheckCircle2, XCircle, Loader2, Globe } from 'lucide-react';
 import { CampaignStatus } from '@/types/database';
 import { toast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
+import { supabase } from '@/integrations/supabase/client';
 
 const statusVariantMap: Record<CampaignStatus, 'draft' | 'active' | 'paused' | 'completed'> = {
   draft: 'draft',
@@ -446,6 +448,117 @@ window.addEventListener('DOMContentLoaded',function(){
                 })()}
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Globe className="w-5 h-5" />
+                  Validate Installation
+                </CardTitle>
+                <CardDescription>Check if the snippet is correctly installed on your website</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const [validateUrl, setValidateUrl] = useState(project.primary_domain ? `https://${project.primary_domain}` : '');
+                  const [isValidating, setIsValidating] = useState(false);
+                  const [validationResult, setValidationResult] = useState<any>(null);
+
+                  const handleValidate = async () => {
+                    if (!validateUrl.trim()) {
+                      toast({ title: 'Error', description: 'Please enter a URL', variant: 'destructive' });
+                      return;
+                    }
+                    setIsValidating(true);
+                    setValidationResult(null);
+                    try {
+                      const { data, error } = await supabase.functions.invoke('validate-snippet', {
+                        body: { url: validateUrl, token: project.publishable_token },
+                      });
+                      if (error) throw error;
+                      setValidationResult(data);
+                    } catch (error: any) {
+                      toast({ title: 'Error', description: error.message || 'Validation failed', variant: 'destructive' });
+                    } finally {
+                      setIsValidating(false);
+                    }
+                  };
+
+                  return (
+                    <div className="space-y-4">
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="https://yourwebsite.com"
+                          value={validateUrl}
+                          onChange={(e) => setValidateUrl(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleValidate()}
+                        />
+                        <Button onClick={handleValidate} disabled={isValidating}>
+                          {isValidating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Validate'}
+                        </Button>
+                      </div>
+
+                      {validationResult && (
+                        <div className={`p-4 rounded-lg border ${validationResult.installed ? 'border-green-500/50 bg-green-500/10' : 'border-destructive/50 bg-destructive/10'}`}>
+                          <div className="flex items-center gap-2 mb-3">
+                            {validationResult.installed ? (
+                              <>
+                                <CheckCircle2 className="w-5 h-5 text-green-500" />
+                                <span className="font-medium text-green-500">Snippet Installed</span>
+                                {validationResult.snippetType && (
+                                  <Badge variant="secondary" className="ml-2">{validationResult.snippetType}</Badge>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="w-5 h-5 text-destructive" />
+                                <span className="font-medium text-destructive">Snippet Not Found</span>
+                              </>
+                            )}
+                          </div>
+
+                          {validationResult.checks && (
+                            <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                              <div className="flex items-center gap-2">
+                                {validationResult.checks.tokenFound ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <XCircle className="w-4 h-4 text-muted-foreground" />}
+                                <span className={validationResult.checks.tokenFound ? '' : 'text-muted-foreground'}>Token found</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {validationResult.checks.edgeAssignFound ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <XCircle className="w-4 h-4 text-muted-foreground" />}
+                                <span className={validationResult.checks.edgeAssignFound ? '' : 'text-muted-foreground'}>API endpoint found</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {validationResult.inHead ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <XCircle className="w-4 h-4 text-muted-foreground" />}
+                                <span className={validationResult.inHead ? '' : 'text-muted-foreground'}>In &lt;head&gt; tag</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {validationResult.checks.sfVkFound ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <XCircle className="w-4 h-4 text-muted-foreground" />}
+                                <span className={validationResult.checks.sfVkFound ? '' : 'text-muted-foreground'}>Visitor key storage</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {validationResult.recommendations?.length > 0 && (
+                            <div className="text-sm text-muted-foreground">
+                              <p className="font-medium mb-1">Recommendations:</p>
+                              <ul className="list-disc list-inside space-y-1">
+                                {validationResult.recommendations.map((rec: string, i: number) => (
+                                  <li key={i}>{rec}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {validationResult.error && (
+                            <p className="text-sm text-destructive">{validationResult.error}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>Your Project Token</CardTitle>
