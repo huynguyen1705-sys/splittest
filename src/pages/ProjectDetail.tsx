@@ -403,6 +403,51 @@ export default function ProjectDetail() {
 
             <Card>
               <CardHeader>
+                <CardTitle>Async Loading (Recommended)</CardTitle>
+                <CardDescription>
+                  Non-blocking script that loads after page content for best performance
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const asyncSnippet = `<script defer>
+window.addEventListener('DOMContentLoaded',function(){
+  var s=localStorage,k="sf_vk",t="${project.publishable_token}",
+      a="https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1";
+  fetch(a+"/edge-assign?token="+t+"&vk="+(s.getItem(k)||"")+"&path="+encodeURIComponent(location.pathname)+"&lang="+(navigator.language||"en").slice(0,2))
+    .then(function(r){return r.json()})
+    .then(function(d){
+      d.visitorKey&&s.setItem(k,d.visitorKey);
+      d.shouldRedirect&&d.url&&(location.href=d.url);
+    }).catch(function(){});
+});
+</script>`;
+                  return (
+                    <div className="relative">
+                      <pre className="p-4 rounded-lg bg-sidebar text-sidebar-foreground text-sm overflow-x-auto">
+                        <code>{asyncSnippet}</code>
+                      </pre>
+                      <Button 
+                        variant="secondary" 
+                        size="sm" 
+                        className="absolute top-2 right-2"
+                        onClick={() => {
+                          navigator.clipboard.writeText(asyncSnippet);
+                          toast({ title: 'Copied!', description: 'Snippet copied to clipboard' });
+                        }}
+                      >
+                        Copy
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-3">
+                        ✓ Non-blocking • ✓ Defer parsing • ✓ Runs after DOM ready
+                      </p>
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
                 <CardTitle>Your Project Token</CardTitle>
                 <CardDescription>This is your unique project identifier</CardDescription>
               </CardHeader>
