@@ -23,12 +23,13 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
           startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       }
 
-      const { data: events, error } = await supabase
-        .from('events_raw')
+      // Query aggregates_minute for pre-computed data
+      const { data: aggregates, error } = await supabase
+        .from('aggregates_minute')
         .select('*')
         .eq('campaign_id', campaignId)
-        .gte('ts', startTime.toISOString())
-        .order('ts', { ascending: true });
+        .gte('minute_ts', startTime.toISOString())
+        .order('minute_ts', { ascending: true });
 
       if (error) throw error;
 
@@ -50,43 +51,57 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
       let ttrCount = 0;
       const timeSeriesMap = new Map<string, { assigns: number; redirectsOk: number }>();
 
-      (events || []).forEach((event) => {
-        const eventType = event.event_type;
-        
-        if (eventType === 'assign') {
-          analytics.totalAssigns++;
-          if (event.variant_id) {
-            if (!analytics.byVariant[event.variant_id]) {
-              analytics.byVariant[event.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0 };
-            }
-            analytics.byVariant[event.variant_id].assigns++;
-          }
-          if (event.country) analytics.byCountry[event.country] = (analytics.byCountry[event.country] || 0) + 1;
-          if (event.device) analytics.byDevice[event.device] = (analytics.byDevice[event.device] || 0) + 1;
-          if (event.browser) analytics.byBrowser[event.browser] = (analytics.byBrowser[event.browser] || 0) + 1;
-          if (event.os) analytics.byOS[event.os] = (analytics.byOS[event.os] || 0) + 1;
-          if (event.lang) analytics.byLang[event.lang] = (analytics.byLang[event.lang] || 0) + 1;
-        } else if (eventType === 'redirect_ok') {
-          analytics.totalRedirectsOk++;
-          if (event.variant_id && analytics.byVariant[event.variant_id]) {
-            analytics.byVariant[event.variant_id].redirectsOk++;
-          }
-          if (event.time_to_redirect_ms) {
-            totalTTR += event.time_to_redirect_ms;
-            ttrCount++;
-          }
-        } else if (eventType === 'redirect_fail') {
-          analytics.totalRedirectsFail++;
-          if (event.variant_id && analytics.byVariant[event.variant_id]) {
-            analytics.byVariant[event.variant_id].redirectsFail++;
-          }
+      (aggregates || []).forEach((agg) => {
+        // Sum up totals
+        analytics.totalAssigns += agg.assigns || 0;
+        analytics.totalRedirectsOk += agg.redirects_ok || 0;
+        analytics.totalRedirectsFail += agg.redirects_fail || 0;
+
+        // Track TTR for weighted average
+        if (agg.avg_ttr_ms && agg.redirects_ok) {
+          totalTTR += agg.avg_ttr_ms * agg.redirects_ok;
+          ttrCount += agg.redirects_ok;
         }
 
-        const tsKey = new Date(event.ts).toISOString().slice(0, timeRange === '1h' ? 16 : 13);
-        if (!timeSeriesMap.has(tsKey)) timeSeriesMap.set(tsKey, { assigns: 0, redirectsOk: 0 });
+        // By variant
+        if (agg.variant_id) {
+          if (!analytics.byVariant[agg.variant_id]) {
+            analytics.byVariant[agg.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0 };
+          }
+          analytics.byVariant[agg.variant_id].assigns += agg.assigns || 0;
+          analytics.byVariant[agg.variant_id].redirectsOk += agg.redirects_ok || 0;
+          analytics.byVariant[agg.variant_id].redirectsFail += agg.redirects_fail || 0;
+        }
+
+        // By dimensions (counting assigns)
+        const assigns = agg.assigns || 0;
+        if (agg.country && assigns > 0) {
+          analytics.byCountry[agg.country] = (analytics.byCountry[agg.country] || 0) + assigns;
+        }
+        if (agg.device && assigns > 0) {
+          analytics.byDevice[agg.device] = (analytics.byDevice[agg.device] || 0) + assigns;
+        }
+        if (agg.browser && assigns > 0) {
+          analytics.byBrowser[agg.browser] = (analytics.byBrowser[agg.browser] || 0) + assigns;
+        }
+        if (agg.os && assigns > 0) {
+          analytics.byOS[agg.os] = (analytics.byOS[agg.os] || 0) + assigns;
+        }
+        if (agg.lang && assigns > 0) {
+          analytics.byLang[agg.lang] = (analytics.byLang[agg.lang] || 0) + assigns;
+        }
+
+        // Time series - group by hour or minute depending on range
+        const tsKey = timeRange === '1h' 
+          ? agg.minute_ts.slice(0, 16) // minute granularity
+          : agg.minute_ts.slice(0, 13); // hour granularity
+        
+        if (!timeSeriesMap.has(tsKey)) {
+          timeSeriesMap.set(tsKey, { assigns: 0, redirectsOk: 0 });
+        }
         const ts = timeSeriesMap.get(tsKey)!;
-        if (eventType === 'assign') ts.assigns++;
-        if (eventType === 'redirect_ok') ts.redirectsOk++;
+        ts.assigns += agg.assigns || 0;
+        ts.redirectsOk += agg.redirects_ok || 0;
       });
 
       analytics.avgTimeToRedirect = ttrCount > 0 ? Math.round(totalTTR / ttrCount) : 0;
@@ -115,6 +130,7 @@ export function useRealtimeEvents(campaignId: string | undefined) {
   useEffect(() => {
     if (!campaignId) return;
 
+    // Real-time events still need events_raw for live data
     const fetchRecent = async () => {
       const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
       const { data } = await supabase
