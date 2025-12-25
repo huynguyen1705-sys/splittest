@@ -281,52 +281,74 @@ export default function CampaignAnalytics() {
           <TabsContent value="realtime" className="space-y-6">
             <Card>
               <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-success animate-pulse" />
-                  <CardTitle>Live Events (Last 60 seconds)</CardTitle>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <Activity className="w-5 h-5 text-success" />
+                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-success rounded-full animate-ping" />
+                    </div>
+                    <CardTitle>Live Events Feed</CardTitle>
+                  </div>
+                  <Badge variant="secondary" className="font-mono">
+                    {realtimeEvents.length} events
+                  </Badge>
                 </div>
                 <CardDescription>
-                  {realtimeEvents.length} events
+                  Showing events from the last 60 seconds • Auto-updates in real-time
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {realtimeEvents.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <Activity className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>Waiting for events...</p>
-                    <p className="text-sm">Events will appear here in real-time</p>
+                  <div className="text-center py-16 text-muted-foreground">
+                    <Activity className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                    <p className="text-lg font-medium mb-1">Waiting for events...</p>
+                    <p className="text-sm">Install the snippet on your website and events will appear here in real-time</p>
                   </div>
                 ) : (
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {realtimeEvents.map((event) => (
-                      <div 
-                        key={event.id} 
-                        className="flex items-center gap-4 p-3 rounded-lg bg-muted/50 animate-in"
-                      >
-                        <div className={`w-2 h-2 rounded-full ${
-                          event.event_type === 'redirect_ok' ? 'bg-success' :
-                          event.event_type === 'redirect_fail' ? 'bg-destructive' :
-                          'bg-primary'
-                        }`} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 text-sm">
-                            <span className="font-medium capitalize">{event.event_type.replace('_', ' ')}</span>
-                            {event.country && (
-                              <span className="text-muted-foreground">{event.country}</span>
-                            )}
-                            {event.device && (
-                              <span className="text-muted-foreground">{event.device}</span>
-                            )}
-                            {event.browser && (
-                              <span className="text-muted-foreground">{event.browser}</span>
-                            )}
+                  <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
+                    {realtimeEvents.map((event, index) => {
+                      const variant = campaign.variants?.find(v => v.id === event.variant_id);
+                      return (
+                        <div 
+                          key={event.id} 
+                          className={`flex items-center gap-4 p-3 rounded-lg border transition-all ${
+                            index === 0 ? 'bg-primary/5 border-primary/20 animate-in slide-in-from-top-2' : 'bg-muted/30 border-transparent'
+                          }`}
+                        >
+                          <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                            event.event_type === 'redirect_ok' ? 'bg-success' :
+                            event.event_type === 'redirect_fail' ? 'bg-destructive' :
+                            event.event_type === 'assign' ? 'bg-primary' :
+                            'bg-muted-foreground'
+                          }`} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 text-sm flex-wrap">
+                              <Badge variant={
+                                event.event_type === 'redirect_ok' ? 'default' :
+                                event.event_type === 'redirect_fail' ? 'destructive' :
+                                'secondary'
+                              } className="text-xs">
+                                {event.event_type === 'redirect_ok' ? 'Redirect OK' :
+                                 event.event_type === 'redirect_fail' ? 'Failed' :
+                                 event.event_type === 'assign' ? 'Assigned' :
+                                 event.event_type}
+                              </Badge>
+                              {variant && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-accent text-accent-foreground">
+                                  {variant.name}
+                                </span>
+                              )}
+                              <span className="text-xs text-muted-foreground">
+                                {[event.country, event.device, event.browser].filter(Boolean).join(' • ')}
+                              </span>
+                            </div>
                           </div>
+                          <span className="text-xs text-muted-foreground font-mono flex-shrink-0">
+                            {new Date(event.ts).toLocaleTimeString()}
+                          </span>
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(event.ts).toLocaleTimeString()}
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
