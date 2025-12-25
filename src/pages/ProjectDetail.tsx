@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { useProject } from '@/hooks/useProjects';
+import { useProject, useUpdateProject } from '@/hooks/useProjects';
 import { useCampaigns, useUpdateCampaign, useDeleteCampaign, useDuplicateCampaign } from '@/hooks/useCampaigns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,7 +19,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, Plus, Settings, Code, BarChart3, Play, Pause, CheckCircle, MoreVertical, Trash2, Pencil, Copy, CheckCircle2, XCircle, Loader2, Globe } from 'lucide-react';
+import { ArrowLeft, Plus, Settings, Code, BarChart3, Play, Pause, CheckCircle, MoreVertical, Trash2, Pencil, Copy, CheckCircle2, XCircle, Loader2, Globe, Save } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { TIMEZONES } from '@/lib/constants';
 import { CampaignStatus } from '@/types/database';
 import { toast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
@@ -40,6 +42,7 @@ export default function ProjectDetail() {
   const updateCampaign = useUpdateCampaign();
   const deleteCampaign = useDeleteCampaign();
   const duplicateCampaign = useDuplicateCampaign();
+  const updateProject = useUpdateProject();
   const navigate = useNavigate();
   
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -47,6 +50,23 @@ export default function ProjectDetail() {
   const [validateUrl, setValidateUrl] = useState('');
   const [isValidating, setIsValidating] = useState(false);
   const [validationResult, setValidationResult] = useState<any>(null);
+  
+  // Settings edit state
+  const [isEditingSettings, setIsEditingSettings] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editDomain, setEditDomain] = useState('');
+  const [editTimezone, setEditTimezone] = useState('');
+  const [editRetention, setEditRetention] = useState('');
+
+  // Initialize settings form when project loads
+  useEffect(() => {
+    if (project) {
+      setEditName(project.name);
+      setEditDomain(project.primary_domain);
+      setEditTimezone(project.timezone || 'UTC');
+      setEditRetention(String(project.data_retention_days || 90));
+    }
+  }, [project]);
 
   // Initialize validateUrl when project loads
   useEffect(() => {
@@ -581,9 +601,59 @@ window.addEventListener('DOMContentLoaded',function(){
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold">Project Settings</h2>
-              <p className="text-muted-foreground">Configure your project settings</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold">Project Settings</h2>
+                <p className="text-muted-foreground">Configure your project settings</p>
+              </div>
+              {!isEditingSettings ? (
+                <Button variant="outline" onClick={() => setIsEditingSettings(true)}>
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Edit Settings
+                </Button>
+              ) : (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsEditingSettings(false);
+                      if (project) {
+                        setEditName(project.name);
+                        setEditDomain(project.primary_domain);
+                        setEditTimezone(project.timezone || 'UTC');
+                        setEditRetention(String(project.data_retention_days || 90));
+                      }
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      if (!project) return;
+                      try {
+                        await updateProject.mutateAsync({
+                          id: project.id,
+                          name: editName,
+                          primary_domain: editDomain,
+                          timezone: editTimezone,
+                          data_retention_days: parseInt(editRetention) || 90,
+                        });
+                        setIsEditingSettings(false);
+                      } catch (error) {
+                        // Error toast handled by hook
+                      }
+                    }}
+                    disabled={updateProject.isPending}
+                  >
+                    {updateProject.isPending ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4 mr-2" />
+                    )}
+                    Save Changes
+                  </Button>
+                </div>
+              )}
             </div>
 
             <Card>
@@ -591,21 +661,69 @@ window.addEventListener('DOMContentLoaded',function(){
                 <CardTitle>General</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
+                <div className="grid gap-2">
                   <label className="text-sm font-medium">Project Name</label>
-                  <p className="text-muted-foreground">{project.name}</p>
+                  {isEditingSettings ? (
+                    <Input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="My Project"
+                    />
+                  ) : (
+                    <p className="text-muted-foreground">{project.name}</p>
+                  )}
                 </div>
-                <div>
+                <div className="grid gap-2">
                   <label className="text-sm font-medium">Primary Domain</label>
-                  <p className="text-muted-foreground">{project.primary_domain}</p>
+                  {isEditingSettings ? (
+                    <Input
+                      value={editDomain}
+                      onChange={(e) => setEditDomain(e.target.value)}
+                      placeholder="example.com"
+                    />
+                  ) : (
+                    <p className="text-muted-foreground">{project.primary_domain}</p>
+                  )}
                 </div>
-                <div>
+                <div className="grid gap-2">
                   <label className="text-sm font-medium">Timezone</label>
-                  <p className="text-muted-foreground">{project.timezone}</p>
+                  {isEditingSettings ? (
+                    <Select value={editTimezone} onValueChange={setEditTimezone}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select timezone" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TIMEZONES.map((tz) => (
+                          <SelectItem key={tz.value} value={tz.value}>
+                            {tz.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      {TIMEZONES.find((tz) => tz.value === project.timezone)?.label || project.timezone}
+                    </p>
+                  )}
                 </div>
-                <div>
+                <div className="grid gap-2">
                   <label className="text-sm font-medium">Data Retention</label>
-                  <p className="text-muted-foreground">{project.data_retention_days} days</p>
+                  {isEditingSettings ? (
+                    <Select value={editRetention} onValueChange={setEditRetention}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select retention period" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="30">30 days</SelectItem>
+                        <SelectItem value="60">60 days</SelectItem>
+                        <SelectItem value="90">90 days</SelectItem>
+                        <SelectItem value="180">180 days</SelectItem>
+                        <SelectItem value="365">365 days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-muted-foreground">{project.data_retention_days} days</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
