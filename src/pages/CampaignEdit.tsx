@@ -22,6 +22,12 @@ interface VariantInput {
   is_control: boolean;
 }
 
+const parseWeight = (value: string): number => {
+  const parsed = parseFloat(value);
+  if (isNaN(parsed)) return 0;
+  return Math.max(0, Math.min(100, parsed));
+};
+
 export default function CampaignEdit() {
   const { id: projectId, campaignId } = useParams<{ id: string; campaignId: string }>();
   const { user, loading: authLoading } = useAuth();
@@ -110,7 +116,7 @@ export default function CampaignEdit() {
     setVariants(variants.map((v, i) => ({ ...v, weight: equalWeight + (i === 0 ? remainder : 0) })));
   };
 
-  const totalWeight = variants.reduce((sum, v) => sum + v.weight, 0);
+  const totalWeight = Math.round(variants.reduce((sum, v) => sum + v.weight, 0) * 100) / 100;
 
   const handleSaveBasics = async () => {
     if (!campaignId || !name.trim()) {
@@ -306,15 +312,28 @@ export default function CampaignEdit() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Traffic Weight ({variant.weight}%)</Label>
-                      <input
-                        type="range"
-                        min="1"
-                        max="99"
-                        value={variant.weight}
-                        onChange={(e) => updateVariant(index, 'weight', parseInt(e.target.value))}
-                        className="w-full"
-                      />
+                      <Label>Traffic Weight</Label>
+                      <div className="flex items-center gap-3">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={variant.weight}
+                          onChange={(e) => updateVariant(index, 'weight', parseWeight(e.target.value))}
+                          className="w-24"
+                        />
+                        <span className="text-sm text-muted-foreground">%</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={variant.weight}
+                          onChange={(e) => updateVariant(index, 'weight', parseWeight(e.target.value))}
+                          className="flex-1"
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
