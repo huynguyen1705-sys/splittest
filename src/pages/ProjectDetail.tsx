@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, Plus, Settings, Code, BarChart3, Play, Pause, CheckCircle, MoreVertical, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Settings, Code, BarChart3, Play, Pause, CheckCircle, MoreVertical, Trash2, Pencil } from 'lucide-react';
 import { CampaignStatus } from '@/types/database';
 import { toast } from '@/hooks/use-toast';
 
@@ -229,6 +229,13 @@ export default function ProjectDetail() {
                               Start
                             </Button>
                           ) : null}
+                          
+                          <Link to={`/project/${id}/campaign/${campaign.id}/edit`}>
+                            <Button variant="outline" size="sm">
+                              <Pencil className="w-4 h-4 mr-1" />
+                              Edit
+                            </Button>
+                          </Link>
                           
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
