@@ -1,0 +1,294 @@
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
+import { useProject } from '@/hooks/useProjects';
+import { useCampaigns } from '@/hooks/useCampaigns';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ArrowLeft, Plus, Settings, Code, BarChart3, Play, Pause, Edit } from 'lucide-react';
+import { CampaignStatus } from '@/types/database';
+
+const statusVariantMap: Record<CampaignStatus, 'draft' | 'active' | 'paused' | 'completed'> = {
+  draft: 'draft',
+  active: 'active',
+  paused: 'paused',
+  completed: 'completed',
+};
+
+export default function ProjectDetail() {
+  const { id } = useParams<{ id: string }>();
+  const { user, loading: authLoading } = useAuth();
+  const { data: project, isLoading: projectLoading } = useProject(id);
+  const { data: campaigns, isLoading: campaignsLoading } = useCampaigns(id);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
+    }
+  }, [user, authLoading, navigate]);
+
+  if (authLoading || projectLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8">
+          <Skeleton className="h-8 w-48 mb-4" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!project) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-2">Project not found</h1>
+          <Link to="/dashboard">
+            <Button>Back to Dashboard</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b border-border bg-card">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link to="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
+              <ArrowLeft className="w-5 h-5" />
+            </Link>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 gradient-primary rounded-lg flex items-center justify-center">
+                <span className="text-lg font-bold text-primary-foreground">S</span>
+              </div>
+              <div>
+                <h1 className="font-semibold">{project.name}</h1>
+                <p className="text-xs text-muted-foreground">{project.primary_domain}</p>
+              </div>
+            </div>
+          </div>
+          <Button variant="ghost" size="icon">
+            <Settings className="w-4 h-4" />
+          </Button>
+        </div>
+      </header>
+
+      {/* Main */}
+      <main className="container mx-auto px-4 py-8">
+        <Tabs defaultValue="campaigns" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="campaigns" className="gap-2">
+              <BarChart3 className="w-4 h-4" />
+              Campaigns
+            </TabsTrigger>
+            <TabsTrigger value="snippet" className="gap-2">
+              <Code className="w-4 h-4" />
+              Install Snippet
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="gap-2">
+              <Settings className="w-4 h-4" />
+              Settings
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="campaigns" className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold">Campaigns</h2>
+                <p className="text-muted-foreground">Manage your split test campaigns</p>
+              </div>
+              <Link to={`/project/${id}/campaign/new`}>
+                <Button>
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Campaign
+                </Button>
+              </Link>
+            </div>
+
+            {campaignsLoading ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-24 w-full" />
+                ))}
+              </div>
+            ) : campaigns?.length === 0 ? (
+              <Card className="text-center py-16">
+                <CardContent>
+                  <BarChart3 className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">No campaigns yet</h3>
+                  <p className="text-muted-foreground mb-6">Create your first split test campaign</p>
+                  <Link to={`/project/${id}/campaign/new`}>
+                    <Button>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create Campaign
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                {campaigns?.map((campaign) => (
+                  <Card key={campaign.id} className="hover:shadow-medium transition-all duration-200">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-3">
+                            <CardTitle className="text-lg">{campaign.name}</CardTitle>
+                            <Badge variant={statusVariantMap[campaign.status as CampaignStatus]}>
+                              {campaign.status}
+                            </Badge>
+                          </div>
+                          <CardDescription>
+                            {campaign.variants?.length || 0} variants · Created {new Date(campaign.created_at).toLocaleDateString()}
+                          </CardDescription>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {campaign.status === 'active' ? (
+                            <Button variant="outline" size="sm">
+                              <Pause className="w-4 h-4 mr-1" />
+                              Pause
+                            </Button>
+                          ) : campaign.status === 'draft' || campaign.status === 'paused' ? (
+                            <Button variant="outline" size="sm">
+                              <Play className="w-4 h-4 mr-1" />
+                              Start
+                            </Button>
+                          ) : null}
+                          <Link to={`/project/${id}/campaign/${campaign.id}`}>
+                            <Button size="sm">
+                              <BarChart3 className="w-4 h-4 mr-1" />
+                              View Analytics
+                            </Button>
+                          </Link>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    {campaign.variants && campaign.variants.length > 0 && (
+                      <CardContent className="pt-0">
+                        <div className="flex flex-wrap gap-2">
+                          {campaign.variants.slice(0, 5).map((variant) => (
+                            <div key={variant.id} className="text-xs px-2 py-1 rounded-md bg-muted">
+                              {variant.name} ({variant.weight}%)
+                            </div>
+                          ))}
+                          {campaign.variants.length > 5 && (
+                            <div className="text-xs px-2 py-1 text-muted-foreground">
+                              +{campaign.variants.length - 5} more
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="snippet" className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold">Install Snippet</h2>
+              <p className="text-muted-foreground">Add this code to your website to enable split testing</p>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>JavaScript Snippet</CardTitle>
+                <CardDescription>
+                  Add this script to the &lt;head&gt; of your website, before any other scripts
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="relative">
+                  <pre className="p-4 rounded-lg bg-sidebar text-sidebar-foreground text-sm overflow-x-auto">
+                    <code>{`<script>
+(function(w,d,s,t){
+  w.SplitFlow=w.SplitFlow||{};
+  w.SplitFlow.token="${project.publishable_token}";
+  var f=d.getElementsByTagName(s)[0],
+      j=d.createElement(s);
+  j.async=true;
+  j.src="https://cdn.splitflow.io/sf.min.js";
+  f.parentNode.insertBefore(j,f);
+})(window,document,"script");
+</script>`}</code>
+                  </pre>
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    className="absolute top-2 right-2"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`<script>
+(function(w,d,s,t){
+  w.SplitFlow=w.SplitFlow||{};
+  w.SplitFlow.token="${project.publishable_token}";
+  var f=d.getElementsByTagName(s)[0],
+      j=d.createElement(s);
+  j.async=true;
+  j.src="https://cdn.splitflow.io/sf.min.js";
+  f.parentNode.insertBefore(j,f);
+})(window,document,"script");
+</script>`);
+                    }}
+                  >
+                    Copy
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Your Project Token</CardTitle>
+                <CardDescription>This is your unique project identifier</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <code className="px-3 py-2 rounded-md bg-muted text-sm font-mono">
+                  {project.publishable_token}
+                </code>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="settings" className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold">Project Settings</h2>
+              <p className="text-muted-foreground">Configure your project settings</p>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>General</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Project Name</label>
+                  <p className="text-muted-foreground">{project.name}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Primary Domain</label>
+                  <p className="text-muted-foreground">{project.primary_domain}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Timezone</label>
+                  <p className="text-muted-foreground">{project.timezone}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Data Retention</label>
+                  <p className="text-muted-foreground">{project.data_retention_days} days</p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </main>
+    </div>
+  );
+}
