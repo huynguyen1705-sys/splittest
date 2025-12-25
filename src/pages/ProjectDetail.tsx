@@ -209,15 +209,38 @@ export default function ProjectDetail() {
                 <div className="relative">
                   <pre className="p-4 rounded-lg bg-sidebar text-sidebar-foreground text-sm overflow-x-auto">
                     <code>{`<script>
-(function(w,d,s,t){
-  w.SplitFlow=w.SplitFlow||{};
-  w.SplitFlow.token="${project.publishable_token}";
-  var f=d.getElementsByTagName(s)[0],
-      j=d.createElement(s);
-  j.async=true;
-  j.src="https://cdn.splitflow.io/sf.min.js";
-  f.parentNode.insertBefore(j,f);
-})(window,document,"script");
+(function(w,d){
+  var SF=w.SplitFlow=w.SplitFlow||{};
+  SF.token="${project.publishable_token}";
+  SF.api="https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1";
+  SF.assign=function(){
+    var vk=localStorage.getItem("sf_vk")||"";
+    var url=SF.api+"/edge-assign?token="+SF.token+"&vk="+vk+"&path="+encodeURIComponent(location.pathname)+"&lang="+(navigator.language||"en").slice(0,2);
+    fetch(url).then(function(r){return r.json()}).then(function(data){
+      if(data.visitorKey)localStorage.setItem("sf_vk",data.visitorKey);
+      if(data.shouldRedirect&&data.url){
+        SF.collect("redirect_ok",data,Date.now());
+        location.href=data.url;
+      }
+    }).catch(function(e){SF.collect("redirect_fail",{},0,e.message)});
+  };
+  SF.collect=function(type,data,start,err){
+    fetch(SF.api+"/collect",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        token:SF.token,
+        type:type,
+        campaignId:data.campaignId,
+        variantId:data.variantId,
+        timeToRedirectMs:start?Date.now()-start:null,
+        errorMessage:err||null,
+        path:location.pathname
+      })
+    });
+  };
+  SF.assign();
+})(window,document);
 </script>`}</code>
                   </pre>
                   <Button 
@@ -226,15 +249,38 @@ export default function ProjectDetail() {
                     className="absolute top-2 right-2"
                     onClick={() => {
                       navigator.clipboard.writeText(`<script>
-(function(w,d,s,t){
-  w.SplitFlow=w.SplitFlow||{};
-  w.SplitFlow.token="${project.publishable_token}";
-  var f=d.getElementsByTagName(s)[0],
-      j=d.createElement(s);
-  j.async=true;
-  j.src="https://cdn.splitflow.io/sf.min.js";
-  f.parentNode.insertBefore(j,f);
-})(window,document,"script");
+(function(w,d){
+  var SF=w.SplitFlow=w.SplitFlow||{};
+  SF.token="${project.publishable_token}";
+  SF.api="https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1";
+  SF.assign=function(){
+    var vk=localStorage.getItem("sf_vk")||"";
+    var url=SF.api+"/edge-assign?token="+SF.token+"&vk="+vk+"&path="+encodeURIComponent(location.pathname)+"&lang="+(navigator.language||"en").slice(0,2);
+    fetch(url).then(function(r){return r.json()}).then(function(data){
+      if(data.visitorKey)localStorage.setItem("sf_vk",data.visitorKey);
+      if(data.shouldRedirect&&data.url){
+        SF.collect("redirect_ok",data,Date.now());
+        location.href=data.url;
+      }
+    }).catch(function(e){SF.collect("redirect_fail",{},0,e.message)});
+  };
+  SF.collect=function(type,data,start,err){
+    fetch(SF.api+"/collect",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        token:SF.token,
+        type:type,
+        campaignId:data.campaignId,
+        variantId:data.variantId,
+        timeToRedirectMs:start?Date.now()-start:null,
+        errorMessage:err||null,
+        path:location.pathname
+      })
+    });
+  };
+  SF.assign();
+})(window,document);
 </script>`);
                     }}
                   >

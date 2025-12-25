@@ -61,6 +61,50 @@ function matchesRules(
   return true;
 }
 
+// Get country from IP using free ip-api.com service
+async function getCountryFromIP(ip: string): Promise<string> {
+  try {
+    // Skip local/private IPs
+    if (ip === '127.0.0.1' || ip === '::1' || ip.startsWith('10.') || ip.startsWith('192.168.') || ip.startsWith('172.')) {
+      return 'US';
+    }
+    
+    const response = await fetch(`http://ip-api.com/json/${ip}?fields=countryCode`, {
+      signal: AbortSignal.timeout(2000), // 2 second timeout
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.countryCode) {
+        console.log(`GeoIP: ${ip} -> ${data.countryCode}`);
+        return data.countryCode;
+      }
+    }
+  } catch (error) {
+    console.warn('GeoIP lookup failed:', error);
+  }
+  
+  return 'US'; // Default fallback
+}
+
+// Extract client IP from request headers
+function getClientIP(req: Request): string {
+  // Check various headers in order of priority
+  const cfConnectingIP = req.headers.get('cf-connecting-ip');
+  if (cfConnectingIP) return cfConnectingIP;
+  
+  const xRealIP = req.headers.get('x-real-ip');
+  if (xRealIP) return xRealIP;
+  
+  const xForwardedFor = req.headers.get('x-forwarded-for');
+  if (xForwardedFor) {
+    // Take the first IP in the chain (original client)
+    return xForwardedFor.split(',')[0].trim();
+  }
+  
+  return '127.0.0.1';
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -105,10 +149,16 @@ Deno.serve(async (req) => {
     const userAgent = req.headers.get('user-agent') || '';
     const { device, browser, os } = parseUserAgent(userAgent);
     
-    // Get country from Cloudflare headers or default
-    const country = req.headers.get('cf-ipcountry') || 'US';
+    // Get country - first try Cloudflare header, then fallback to IP geolocation
+    let country = req.headers.get('cf-ipcountry');
+    if (!country || country === 'XX') {
+      const clientIP = getClientIP(req);
+      console.log(`No CF header, looking up IP: ${clientIP}`);
+      country = await getCountryFromIP(clientIP);
+    }
     
     const context = { country, device, browser, os, lang };
+    console.log('Visitor context:', JSON.stringify(context));
 
     // Get active campaigns for this project
     const { data: campaigns } = await supabase

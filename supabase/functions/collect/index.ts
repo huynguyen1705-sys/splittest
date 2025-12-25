@@ -5,6 +5,47 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Get country from IP using free ip-api.com service
+async function getCountryFromIP(ip: string): Promise<string> {
+  try {
+    // Skip local/private IPs
+    if (ip === '127.0.0.1' || ip === '::1' || ip.startsWith('10.') || ip.startsWith('192.168.') || ip.startsWith('172.')) {
+      return 'US';
+    }
+    
+    const response = await fetch(`http://ip-api.com/json/${ip}?fields=countryCode`, {
+      signal: AbortSignal.timeout(2000), // 2 second timeout
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.countryCode) {
+        return data.countryCode;
+      }
+    }
+  } catch (error) {
+    console.warn('GeoIP lookup failed:', error);
+  }
+  
+  return 'US'; // Default fallback
+}
+
+// Extract client IP from request headers
+function getClientIP(req: Request): string {
+  const cfConnectingIP = req.headers.get('cf-connecting-ip');
+  if (cfConnectingIP) return cfConnectingIP;
+  
+  const xRealIP = req.headers.get('x-real-ip');
+  if (xRealIP) return xRealIP;
+  
+  const xForwardedFor = req.headers.get('x-forwarded-for');
+  if (xForwardedFor) {
+    return xForwardedFor.split(',')[0].trim();
+  }
+  
+  return '127.0.0.1';
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -13,7 +54,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { token, campaignId, variantId, type, timeToRedirectMs, errorMessage, visitorKeyHash, country, device, browser, os, lang, path } = body;
+    const { token, campaignId, variantId, type, timeToRedirectMs, errorMessage, visitorKeyHash, device, browser, os, lang, path } = body;
 
     if (!token || !type) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
@@ -48,6 +89,13 @@ Deno.serve(async (req) => {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Get country - try Cloudflare header first, then IP geolocation
+    let country = req.headers.get('cf-ipcountry');
+    if (!country || country === 'XX') {
+      const clientIP = getClientIP(req);
+      country = await getCountryFromIP(clientIP);
     }
 
     // Insert event

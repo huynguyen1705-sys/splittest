@@ -1,1 +1,7 @@
 project_id = "clgztmdjppmbkcfdtxhw"
+
+[functions.edge-assign]
+verify_jwt = false
+
+[functions.collect]
+verify_jwt = false
