@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Play, Pause, Activity, Users, CheckCircle, XCircle, Clock, Globe, Monitor, Chrome } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Activity, Users, CheckCircle, XCircle, Clock, Globe, Monitor, Chrome, Settings } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { CampaignStatus } from '@/types/database';
 
@@ -111,6 +111,12 @@ export default function CampaignAnalytics() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Link to={`/project/${projectId}/campaign/${campaignId}/edit`}>
+              <Button variant="outline">
+                <Settings className="w-4 h-4 mr-2" />
+                Edit
+              </Button>
+            </Link>
             {campaign.status === 'active' ? (
               <Button variant="outline" onClick={() => handleStatusChange('paused')} disabled={updateCampaign.isPending}>
                 <Pause className="w-4 h-4 mr-2" />
