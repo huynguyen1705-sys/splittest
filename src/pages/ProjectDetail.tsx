@@ -295,10 +295,16 @@ export default function ProjectDetail() {
                 <CardTitle>Your Project Token</CardTitle>
                 <CardDescription>This is your unique project identifier</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex items-center justify-between">
                 <code className="px-3 py-2 rounded-md bg-muted text-sm font-mono">
                   {project.publishable_token}
                 </code>
+                <Link to={`/test?token=${project.publishable_token}`}>
+                  <Button variant="outline" size="sm">
+                    <Play className="w-4 h-4 mr-2" />
+                    Test Edge Functions
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
           </TabsContent>
