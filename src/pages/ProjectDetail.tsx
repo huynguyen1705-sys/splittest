@@ -1,15 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useProject } from '@/hooks/useProjects';
-import { useCampaigns } from '@/hooks/useCampaigns';
+import { useCampaigns, useUpdateCampaign } from '@/hooks/useCampaigns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Plus, Settings, Code, BarChart3, Play, Pause, Edit } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { ArrowLeft, Plus, Settings, Code, BarChart3, Play, Pause, CheckCircle, MoreVertical } from 'lucide-react';
 import { CampaignStatus } from '@/types/database';
+import { toast } from '@/hooks/use-toast';
 
 const statusVariantMap: Record<CampaignStatus, 'draft' | 'active' | 'paused' | 'completed'> = {
   draft: 'draft',
@@ -23,7 +25,24 @@ export default function ProjectDetail() {
   const { user, loading: authLoading } = useAuth();
   const { data: project, isLoading: projectLoading } = useProject(id);
   const { data: campaigns, isLoading: campaignsLoading } = useCampaigns(id);
+  const updateCampaign = useUpdateCampaign();
   const navigate = useNavigate();
+
+  const handleStatusChange = async (campaignId: string, newStatus: CampaignStatus, campaignName: string) => {
+    try {
+      await updateCampaign.mutateAsync({ id: campaignId, status: newStatus });
+      toast({
+        title: 'Campaign updated',
+        description: `"${campaignName}" is now ${newStatus}`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update campaign status',
+        variant: 'destructive',
+      });
+    }
+  };
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -151,20 +170,57 @@ export default function ProjectDetail() {
                         </div>
                         <div className="flex items-center gap-2">
                           {campaign.status === 'active' ? (
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleStatusChange(campaign.id, 'paused', campaign.name)}
+                              disabled={updateCampaign.isPending}
+                            >
                               <Pause className="w-4 h-4 mr-1" />
                               Pause
                             </Button>
                           ) : campaign.status === 'draft' || campaign.status === 'paused' ? (
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleStatusChange(campaign.id, 'active', campaign.name)}
+                              disabled={updateCampaign.isPending}
+                            >
                               <Play className="w-4 h-4 mr-1" />
                               Start
                             </Button>
                           ) : null}
+                          
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreVertical className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {campaign.status !== 'completed' && (
+                                <DropdownMenuItem 
+                                  onClick={() => handleStatusChange(campaign.id, 'completed', campaign.name)}
+                                >
+                                  <CheckCircle className="w-4 h-4 mr-2" />
+                                  Mark Complete
+                                </DropdownMenuItem>
+                              )}
+                              {campaign.status === 'completed' && (
+                                <DropdownMenuItem 
+                                  onClick={() => handleStatusChange(campaign.id, 'paused', campaign.name)}
+                                >
+                                  <Pause className="w-4 h-4 mr-2" />
+                                  Reopen as Paused
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          
                           <Link to={`/project/${id}/campaign/${campaign.id}`}>
                             <Button size="sm">
                               <BarChart3 className="w-4 h-4 mr-1" />
-                              View Analytics
+                              Analytics
                             </Button>
                           </Link>
                         </div>
