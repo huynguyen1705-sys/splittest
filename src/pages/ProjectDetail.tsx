@@ -324,87 +324,80 @@ export default function ProjectDetail() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="relative">
-                  <pre className="p-4 rounded-lg bg-sidebar text-sidebar-foreground text-sm overflow-x-auto">
-                    <code>{`<script>
-(function(w,d){
-  var SF=w.SplitFlow=w.SplitFlow||{};
-  SF.token="${project.publishable_token}";
-  SF.api="https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1";
-  SF.assign=function(){
-    var vk=localStorage.getItem("sf_vk")||"";
-    var url=SF.api+"/edge-assign?token="+SF.token+"&vk="+vk+"&path="+encodeURIComponent(location.pathname)+"&lang="+(navigator.language||"en").slice(0,2);
-    fetch(url).then(function(r){return r.json()}).then(function(data){
-      if(data.visitorKey)localStorage.setItem("sf_vk",data.visitorKey);
-      if(data.shouldRedirect&&data.url){
-        SF.collect("redirect_ok",data,Date.now());
-        location.href=data.url;
+                {(() => {
+                  const minifiedSnippet = `<script>!function(){var s=localStorage,k="sf_vk",t="${project.publishable_token}",a="https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1";fetch(a+"/edge-assign?token="+t+"&vk="+(s.getItem(k)||"")+"&path="+encodeURIComponent(location.pathname)+"&lang="+(navigator.language||"en").slice(0,2)).then(r=>r.json()).then(d=>{d.visitorKey&&s.setItem(k,d.visitorKey);d.shouldRedirect&&d.url&&(location.href=d.url)}).catch(()=>{})}()</script>`;
+                  return (
+                    <div className="relative">
+                      <pre className="p-4 rounded-lg bg-sidebar text-sidebar-foreground text-sm overflow-x-auto">
+                        <code>{minifiedSnippet}</code>
+                      </pre>
+                      <Button 
+                        variant="secondary" 
+                        size="sm" 
+                        className="absolute top-2 right-2"
+                        onClick={() => {
+                          navigator.clipboard.writeText(minifiedSnippet);
+                          toast({ title: 'Copied!', description: 'Snippet copied to clipboard' });
+                        }}
+                      >
+                        Copy
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-3">
+                        ~350 bytes minified • No dependencies • Async loading
+                      </p>
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Full Version (with tracking)</CardTitle>
+                <CardDescription>
+                  Use this if you need detailed analytics and error tracking
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const fullSnippet = `<script>
+!function(){
+  var s=localStorage,k="sf_vk",t="${project.publishable_token}",
+      a="https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1",st=Date.now();
+  fetch(a+"/edge-assign?token="+t+"&vk="+(s.getItem(k)||"")+"&path="+encodeURIComponent(location.pathname)+"&lang="+(navigator.language||"en").slice(0,2))
+    .then(r=>r.json())
+    .then(d=>{
+      d.visitorKey&&s.setItem(k,d.visitorKey);
+      if(d.shouldRedirect&&d.url){
+        navigator.sendBeacon(a+"/collect",JSON.stringify({token:t,type:"redirect_ok",campaignId:d.campaignId,variantId:d.variantId,timeToRedirectMs:Date.now()-st,path:location.pathname}));
+        location.href=d.url;
       }
-    }).catch(function(e){SF.collect("redirect_fail",{},0,e.message)});
-  };
-  SF.collect=function(type,data,start,err){
-    fetch(SF.api+"/collect",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        token:SF.token,
-        type:type,
-        campaignId:data.campaignId,
-        variantId:data.variantId,
-        timeToRedirectMs:start?Date.now()-start:null,
-        errorMessage:err||null,
-        path:location.pathname
-      })
-    });
-  };
-  SF.assign();
-})(window,document);
-</script>`}</code>
-                  </pre>
-                  <Button 
-                    variant="secondary" 
-                    size="sm" 
-                    className="absolute top-2 right-2"
-                    onClick={() => {
-                      navigator.clipboard.writeText(`<script>
-(function(w,d){
-  var SF=w.SplitFlow=w.SplitFlow||{};
-  SF.token="${project.publishable_token}";
-  SF.api="https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1";
-  SF.assign=function(){
-    var vk=localStorage.getItem("sf_vk")||"";
-    var url=SF.api+"/edge-assign?token="+SF.token+"&vk="+vk+"&path="+encodeURIComponent(location.pathname)+"&lang="+(navigator.language||"en").slice(0,2);
-    fetch(url).then(function(r){return r.json()}).then(function(data){
-      if(data.visitorKey)localStorage.setItem("sf_vk",data.visitorKey);
-      if(data.shouldRedirect&&data.url){
-        SF.collect("redirect_ok",data,Date.now());
-        location.href=data.url;
-      }
-    }).catch(function(e){SF.collect("redirect_fail",{},0,e.message)});
-  };
-  SF.collect=function(type,data,start,err){
-    fetch(SF.api+"/collect",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        token:SF.token,
-        type:type,
-        campaignId:data.campaignId,
-        variantId:data.variantId,
-        timeToRedirectMs:start?Date.now()-start:null,
-        errorMessage:err||null,
-        path:location.pathname
-      })
-    });
-  };
-  SF.assign();
-})(window,document);
-</script>`);
-                    }}
-                  >
-                    Copy
-                  </Button>
-                </div>
+    })
+    .catch(e=>navigator.sendBeacon(a+"/collect",JSON.stringify({token:t,type:"redirect_fail",errorMessage:e.message,path:location.pathname})));
+}()
+</script>`;
+                  return (
+                    <div className="relative">
+                      <pre className="p-4 rounded-lg bg-sidebar text-sidebar-foreground text-sm overflow-x-auto">
+                        <code>{fullSnippet}</code>
+                      </pre>
+                      <Button 
+                        variant="secondary" 
+                        size="sm" 
+                        className="absolute top-2 right-2"
+                        onClick={() => {
+                          navigator.clipboard.writeText(fullSnippet);
+                          toast({ title: 'Copied!', description: 'Snippet copied to clipboard' });
+                        }}
+                      >
+                        Copy
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-3">
+                        Uses sendBeacon for reliable tracking even during redirect
+                      </p>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
 
