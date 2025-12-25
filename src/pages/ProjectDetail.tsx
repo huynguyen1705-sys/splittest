@@ -1,15 +1,25 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useProject } from '@/hooks/useProjects';
-import { useCampaigns, useUpdateCampaign } from '@/hooks/useCampaigns';
+import { useCampaigns, useUpdateCampaign, useDeleteCampaign } from '@/hooks/useCampaigns';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { ArrowLeft, Plus, Settings, Code, BarChart3, Play, Pause, CheckCircle, MoreVertical } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { ArrowLeft, Plus, Settings, Code, BarChart3, Play, Pause, CheckCircle, MoreVertical, Trash2 } from 'lucide-react';
 import { CampaignStatus } from '@/types/database';
 import { toast } from '@/hooks/use-toast';
 
@@ -26,7 +36,36 @@ export default function ProjectDetail() {
   const { data: project, isLoading: projectLoading } = useProject(id);
   const { data: campaigns, isLoading: campaignsLoading } = useCampaigns(id);
   const updateCampaign = useUpdateCampaign();
+  const deleteCampaign = useDeleteCampaign();
   const navigate = useNavigate();
+  
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [campaignToDelete, setCampaignToDelete] = useState<{ id: string; name: string } | null>(null);
+
+  const handleDeleteClick = (campaignId: string, campaignName: string) => {
+    setCampaignToDelete({ id: campaignId, name: campaignName });
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!campaignToDelete) return;
+    try {
+      await deleteCampaign.mutateAsync(campaignToDelete.id);
+      toast({
+        title: 'Campaign deleted',
+        description: `"${campaignToDelete.name}" has been deleted`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete campaign',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleteDialogOpen(false);
+      setCampaignToDelete(null);
+    }
+  };
 
   const handleStatusChange = async (campaignId: string, newStatus: CampaignStatus, campaignName: string) => {
     try {
@@ -214,6 +253,14 @@ export default function ProjectDetail() {
                                   Reopen as Paused
                                 </DropdownMenuItem>
                               )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem 
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => handleDeleteClick(campaign.id, campaign.name)}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Delete Campaign
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                           
@@ -397,6 +444,26 @@ export default function ProjectDetail() {
           </TabsContent>
         </Tabs>
       </main>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{campaignToDelete?.name}"? This action cannot be undone and will remove all associated variants, rules, and analytics data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteCampaign.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
