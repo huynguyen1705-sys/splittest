@@ -321,9 +321,15 @@ export function useUpdateRules() {
         include_paths?: string[];
       };
     }) => {
+      // Delete existing rules first, then insert new ones
+      await supabase
+        .from('campaign_rules')
+        .delete()
+        .eq('campaign_id', campaignId);
+
       const { error } = await supabase
         .from('campaign_rules')
-        .upsert({
+        .insert({
           campaign_id: campaignId,
           country_in: rules.country_in || [],
           device_in: rules.device_in || [],
@@ -331,7 +337,7 @@ export function useUpdateRules() {
           os_in: rules.os_in || [],
           lang_in: rules.lang_in || [],
           include_paths: rules.include_paths || [],
-        }, { onConflict: 'campaign_id' });
+        });
 
       if (error) throw error;
     },

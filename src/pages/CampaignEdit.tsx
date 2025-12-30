@@ -71,7 +71,9 @@ export default function CampaignEdit() {
         })));
       }
 
-      const rules = campaign.campaign_rules?.[0];
+      // campaign_rules can be an array or single object depending on query
+      const rulesData = campaign.campaign_rules;
+      const rules = Array.isArray(rulesData) ? rulesData[0] : rulesData;
       if (rules) {
         setSelectedCountries(rules.country_in || []);
         setSelectedDevices(rules.device_in || []);
