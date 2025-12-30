@@ -370,14 +370,52 @@ export default function ProjectDetail() {
 
             <Card>
               <CardHeader>
-                <CardTitle>JavaScript Snippet</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded">Recommended</span>
+                  Instant Redirect Snippet
+                </CardTitle>
                 <CardDescription>
-                  Add this script to the &lt;head&gt; of your website, before any other scripts
+                  Add this script to the &lt;head&gt; of your website, <strong>before any other scripts</strong>. Shows loading overlay and redirects instantly.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {(() => {
-                  const minifiedSnippet = `<script>!function(){var s=localStorage,k="sf_vk",t="${project.publishable_token}",a="https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1";fetch(a+"/edge-assign?token="+t+"&vk="+(s.getItem(k)||"")+"&path="+encodeURIComponent(location.pathname)+"&lang="+(navigator.language||"en").slice(0,2)).then(r=>r.json()).then(d=>{d.visitorKey&&s.setItem(k,d.visitorKey);d.shouldRedirect&&d.url&&(location.href=d.url)}).catch(()=>{})}()</script>`;
+                  const instantSnippet = `<script>!function(){var d=document,s=localStorage,k="sf_vk",t="${project.publishable_token}",a="https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1",l=d.createElement("div");l.id="sf-loader";l.innerHTML='<div style="position:fixed;inset:0;background:#fff;z-index:999999;display:flex;align-items:center;justify-content:center"><div style="width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#3b82f6;border-radius:50%;animation:sf-spin 1s linear infinite"></div></div><style>@keyframes sf-spin{to{transform:rotate(360deg)}}</style>';d.documentElement.appendChild(l);fetch(a+"/edge-assign?token="+t+"&vk="+(s.getItem(k)||"")+"&path="+encodeURIComponent(location.pathname)+"&lang="+(navigator.language||"en").slice(0,2)).then(r=>r.json()).then(r=>{r.visitorKey&&s.setItem(k,r.visitorKey);r.shouldRedirect&&r.url?location.replace(r.url):l.remove()}).catch(()=>l.remove())}()</script>`;
+                  return (
+                    <div className="relative">
+                      <pre className="p-4 rounded-lg bg-sidebar text-sidebar-foreground text-sm overflow-x-auto">
+                        <code>{instantSnippet}</code>
+                      </pre>
+                      <Button 
+                        variant="secondary" 
+                        size="sm" 
+                        className="absolute top-2 right-2"
+                        onClick={() => {
+                          navigator.clipboard.writeText(instantSnippet);
+                          toast({ title: 'Copied!', description: 'Snippet copied to clipboard' });
+                        }}
+                      >
+                        Copy
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-3">
+                        ~500 bytes • Loading overlay • Instant redirect with location.replace()
+                      </p>
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Basic Snippet (No Loading)</CardTitle>
+                <CardDescription>
+                  Minimal version without loading indicator - fastest to load but may show page briefly
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const minifiedSnippet = `<script>!function(){var s=localStorage,k="sf_vk",t="${project.publishable_token}",a="https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1";fetch(a+"/edge-assign?token="+t+"&vk="+(s.getItem(k)||"")+"&path="+encodeURIComponent(location.pathname)+"&lang="+(navigator.language||"en").slice(0,2)).then(r=>r.json()).then(d=>{d.visitorKey&&s.setItem(k,d.visitorKey);d.shouldRedirect&&d.url&&location.replace(d.url)}).catch(()=>{})}()</script>`;
                   return (
                     <div className="relative">
                       <pre className="p-4 rounded-lg bg-sidebar text-sidebar-foreground text-sm overflow-x-auto">
@@ -396,102 +434,6 @@ export default function ProjectDetail() {
                       </Button>
                       <p className="text-xs text-muted-foreground mt-3">
                         ~350 bytes minified • No dependencies • Async loading
-                      </p>
-                    </div>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Full Version (with tracking)</CardTitle>
-                <CardDescription>
-                  Use this if you need detailed analytics and error tracking
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {(() => {
-                  const fullSnippet = `<script>
-!function(){
-  var s=localStorage,k="sf_vk",t="${project.publishable_token}",
-      a="https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1",st=Date.now();
-  fetch(a+"/edge-assign?token="+t+"&vk="+(s.getItem(k)||"")+"&path="+encodeURIComponent(location.pathname)+"&lang="+(navigator.language||"en").slice(0,2))
-    .then(r=>r.json())
-    .then(d=>{
-      d.visitorKey&&s.setItem(k,d.visitorKey);
-      if(d.shouldRedirect&&d.url){
-        navigator.sendBeacon(a+"/collect",JSON.stringify({token:t,type:"redirect_ok",campaignId:d.campaignId,variantId:d.variantId,timeToRedirectMs:Date.now()-st,path:location.pathname}));
-        location.href=d.url;
-      }
-    })
-    .catch(e=>navigator.sendBeacon(a+"/collect",JSON.stringify({token:t,type:"redirect_fail",errorMessage:e.message,path:location.pathname})));
-}()
-</script>`;
-                  return (
-                    <div className="relative">
-                      <pre className="p-4 rounded-lg bg-sidebar text-sidebar-foreground text-sm overflow-x-auto">
-                        <code>{fullSnippet}</code>
-                      </pre>
-                      <Button 
-                        variant="secondary" 
-                        size="sm" 
-                        className="absolute top-2 right-2"
-                        onClick={() => {
-                          navigator.clipboard.writeText(fullSnippet);
-                          toast({ title: 'Copied!', description: 'Snippet copied to clipboard' });
-                        }}
-                      >
-                        Copy
-                      </Button>
-                      <p className="text-xs text-muted-foreground mt-3">
-                        Uses sendBeacon for reliable tracking even during redirect
-                      </p>
-                    </div>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Async Loading (Recommended)</CardTitle>
-                <CardDescription>
-                  Non-blocking script that loads after page content for best performance
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {(() => {
-                  const asyncSnippet = `<script defer>
-window.addEventListener('DOMContentLoaded',function(){
-  var s=localStorage,k="sf_vk",t="${project.publishable_token}",
-      a="https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1";
-  fetch(a+"/edge-assign?token="+t+"&vk="+(s.getItem(k)||"")+"&path="+encodeURIComponent(location.pathname)+"&lang="+(navigator.language||"en").slice(0,2))
-    .then(function(r){return r.json()})
-    .then(function(d){
-      d.visitorKey&&s.setItem(k,d.visitorKey);
-      d.shouldRedirect&&d.url&&(location.href=d.url);
-    }).catch(function(){});
-});
-</script>`;
-                  return (
-                    <div className="relative">
-                      <pre className="p-4 rounded-lg bg-sidebar text-sidebar-foreground text-sm overflow-x-auto">
-                        <code>{asyncSnippet}</code>
-                      </pre>
-                      <Button 
-                        variant="secondary" 
-                        size="sm" 
-                        className="absolute top-2 right-2"
-                        onClick={() => {
-                          navigator.clipboard.writeText(asyncSnippet);
-                          toast({ title: 'Copied!', description: 'Snippet copied to clipboard' });
-                        }}
-                      >
-                        Copy
-                      </Button>
-                      <p className="text-xs text-muted-foreground mt-3">
-                        ✓ Non-blocking • ✓ Defer parsing • ✓ Runs after DOM ready
                       </p>
                     </div>
                   );
