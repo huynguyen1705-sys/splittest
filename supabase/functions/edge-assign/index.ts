@@ -181,10 +181,21 @@ Deno.serve(async (req) => {
     // Find matching campaign
     let matchedCampaign = null;
     for (const campaign of campaigns) {
-      const rules = campaign.campaign_rules?.[0] || { country_in: [], device_in: [], browser_in: [], os_in: [], lang_in: [] };
+      // campaign_rules can be array or single object depending on Supabase query
+      const rulesData = campaign.campaign_rules;
+      const rules = Array.isArray(rulesData) 
+        ? (rulesData[0] || { country_in: [], device_in: [], browser_in: [], os_in: [], lang_in: [] })
+        : (rulesData || { country_in: [], device_in: [], browser_in: [], os_in: [], lang_in: [] });
+      
+      console.log(`Campaign ${campaign.id} rules:`, JSON.stringify(rules));
+      console.log(`Checking match: country_in=${JSON.stringify(rules.country_in)}, visitor_country=${context.country}`);
+      
       if (matchesRules(rules, context)) {
+        console.log(`Campaign ${campaign.id} MATCHED`);
         matchedCampaign = campaign;
         break;
+      } else {
+        console.log(`Campaign ${campaign.id} NOT matched`);
       }
     }
 
