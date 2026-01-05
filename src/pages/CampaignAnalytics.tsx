@@ -159,16 +159,16 @@ export default function CampaignAnalytics() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link to={`/project/${projectId}`} className="text-muted-foreground hover:text-foreground transition-colors">
+        <div className="container mx-auto px-4 h-14 sm:h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+            <Link to={`/project/${projectId}`} className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
               <ArrowLeft className="w-5 h-5" />
             </Link>
-            <div className="flex items-center gap-3">
-              <div>
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h1 className="font-semibold">{campaign.name}</h1>
-                  <Badge variant={statusVariantMap[campaign.status as CampaignStatus]}>
+                  <h1 className="font-semibold text-sm sm:text-base truncate">{campaign.name}</h1>
+                  <Badge variant={statusVariantMap[campaign.status as CampaignStatus]} className="flex-shrink-0">
                     {campaign.status}
                   </Badge>
                 </div>
@@ -178,22 +178,22 @@ export default function CampaignAnalytics() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             <Link to={`/project/${projectId}/campaign/${campaignId}/edit`}>
-              <Button variant="outline">
-                <Settings className="w-4 h-4 mr-2" />
-                Edit
+              <Button variant="outline" size="sm" className="h-8 sm:h-9">
+                <Settings className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Edit</span>
               </Button>
             </Link>
             {campaign.status === 'active' ? (
-              <Button variant="outline" onClick={() => handleStatusChange('paused')} disabled={updateCampaign.isPending}>
-                <Pause className="w-4 h-4 mr-2" />
-                Pause
+              <Button variant="outline" size="sm" className="h-8 sm:h-9" onClick={() => handleStatusChange('paused')} disabled={updateCampaign.isPending}>
+                <Pause className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Pause</span>
               </Button>
             ) : (
-              <Button onClick={() => handleStatusChange('active')} disabled={updateCampaign.isPending}>
-                <Play className="w-4 h-4 mr-2" />
-                Start
+              <Button size="sm" className="h-8 sm:h-9" onClick={() => handleStatusChange('active')} disabled={updateCampaign.isPending}>
+                <Play className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Start</span>
               </Button>
             )}
           </div>
@@ -201,11 +201,11 @@ export default function CampaignAnalytics() {
       </header>
 
       {/* Main */}
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-4 sm:py-8">
         {/* Realtime Indicator */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <div className={`flex items-center gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm ${
               isLive ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'
             }`}>
               {isLive ? (
@@ -224,20 +224,20 @@ export default function CampaignAnalytics() {
               )}
             </div>
             {newEventCount > 0 && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm animate-in slide-in-from-left-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-primary/10 text-primary text-xs sm:text-sm animate-in slide-in-from-left-2">
                 <Activity className="w-3 h-3" />
-                <span>+{newEventCount} new</span>
+                <span>+{newEventCount}</span>
               </div>
             )}
             {lastEventTime && (
-              <span className="text-xs text-muted-foreground">
-                Last event: {lastEventTime.toLocaleTimeString()}
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                Last: {lastEventTime.toLocaleTimeString()}
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
             <Select value={testEventType} onValueChange={(v) => setTestEventType(v as typeof testEventType)}>
-              <SelectTrigger className="w-36">
+              <SelectTrigger className="w-28 sm:w-36 h-8 sm:h-9 text-xs sm:text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -264,20 +264,21 @@ export default function CampaignAnalytics() {
             <Button 
               variant="outline" 
               size="sm" 
+              className="h-8 sm:h-9"
               onClick={handleTestEvent}
               disabled={isSendingTestEvent}
             >
-              <Zap className="w-4 h-4 mr-2" />
-              {isSendingTestEvent ? 'Sending...' : 'Send'}
+              <Zap className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">{isSendingTestEvent ? 'Sending...' : 'Send'}</span>
             </Button>
           </div>
         </div>
 
-        <Tabs defaultValue="overview" className="space-y-6">
-          <div className="flex items-center justify-between">
-            <TabsList>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="realtime" className="relative">
+        <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <TabsList className="w-full sm:w-auto">
+              <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
+              <TabsTrigger value="realtime" className="relative text-xs sm:text-sm">
                 Real-Time
                 {newEventCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full text-[10px] text-primary-foreground flex items-center justify-center">
@@ -285,10 +286,10 @@ export default function CampaignAnalytics() {
                   </span>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="breakdown">Breakdown</TabsTrigger>
+              <TabsTrigger value="breakdown" className="text-xs sm:text-sm">Breakdown</TabsTrigger>
             </TabsList>
             <Select value={timeRange} onValueChange={(v) => setTimeRange(v as typeof timeRange)}>
-              <SelectTrigger className="w-32">
+              <SelectTrigger className="w-full sm:w-32 h-8 sm:h-9 text-xs sm:text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -299,57 +300,57 @@ export default function CampaignAnalytics() {
             </Select>
           </div>
 
-          <TabsContent value="overview" className="space-y-6">
+          <TabsContent value="overview" className="space-y-4 sm:space-y-6">
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
               <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Users className="w-5 h-5 text-primary" />
+                <CardContent className="pt-4 sm:pt-6">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Users className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Assignments</p>
-                      <p className="text-2xl font-bold">{analytics?.totalAssigns.toLocaleString() || 0}</p>
+                    <div className="min-w-0">
+                      <p className="text-xs sm:text-sm text-muted-foreground">Assigns</p>
+                      <p className="text-lg sm:text-2xl font-bold">{analytics?.totalAssigns.toLocaleString() || 0}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
-                      <CheckCircle className="w-5 h-5 text-success" />
+                <CardContent className="pt-4 sm:pt-6">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-success/10 flex items-center justify-center flex-shrink-0">
+                      <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-success" />
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Successful</p>
-                      <p className="text-2xl font-bold">{analytics?.totalRedirectsOk.toLocaleString() || 0}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center">
-                      <XCircle className="w-5 h-5 text-destructive" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Failed</p>
-                      <p className="text-2xl font-bold">{analytics?.totalRedirectsFail.toLocaleString() || 0}</p>
+                    <div className="min-w-0">
+                      <p className="text-xs sm:text-sm text-muted-foreground">Success</p>
+                      <p className="text-lg sm:text-2xl font-bold">{analytics?.totalRedirectsOk.toLocaleString() || 0}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-info/10 flex items-center justify-center">
-                      <Clock className="w-5 h-5 text-info" />
+                <CardContent className="pt-4 sm:pt-6">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-destructive/10 flex items-center justify-center flex-shrink-0">
+                      <XCircle className="w-4 h-4 sm:w-5 sm:h-5 text-destructive" />
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Avg. TTR</p>
-                      <p className="text-2xl font-bold">{analytics?.avgTimeToRedirect || 0}ms</p>
+                    <div className="min-w-0">
+                      <p className="text-xs sm:text-sm text-muted-foreground">Failed</p>
+                      <p className="text-lg sm:text-2xl font-bold">{analytics?.totalRedirectsFail.toLocaleString() || 0}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4 sm:pt-6">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-info/10 flex items-center justify-center flex-shrink-0">
+                      <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-info" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs sm:text-sm text-muted-foreground">Avg. TTR</p>
+                      <p className="text-lg sm:text-2xl font-bold">{analytics?.avgTimeToRedirect || 0}ms</p>
                     </div>
                   </div>
                 </CardContent>
@@ -358,28 +359,29 @@ export default function CampaignAnalytics() {
 
             {/* Chart */}
             <Card>
-              <CardHeader>
-                <CardTitle>Traffic Over Time</CardTitle>
+              <CardHeader className="pb-2 sm:pb-4">
+                <CardTitle className="text-base sm:text-lg">Traffic Over Time</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-2 sm:px-6">
                 {analyticsLoading ? (
-                  <Skeleton className="h-64" />
+                  <Skeleton className="h-48 sm:h-64" />
                 ) : analytics?.timeSeries.length === 0 ? (
-                  <div className="h-64 flex items-center justify-center text-muted-foreground">
+                  <div className="h-48 sm:h-64 flex items-center justify-center text-muted-foreground text-sm">
                     No data available for this time range
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={300}>
+                  <ResponsiveContainer width="100%" height={250}>
                     <LineChart data={analytics?.timeSeries}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                       <XAxis 
                         dataKey="ts" 
                         className="text-xs"
+                        tick={{ fontSize: 10 }}
                         tickFormatter={(v) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       />
-                      <YAxis className="text-xs" />
+                      <YAxis className="text-xs" tick={{ fontSize: 10 }} width={35} />
                       <Tooltip 
-                        contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                        contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 12 }}
                         labelFormatter={(v) => new Date(v).toLocaleString()}
                       />
                       <Line type="monotone" dataKey="assigns" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} name="Assignments" />

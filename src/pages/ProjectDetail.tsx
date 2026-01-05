@@ -172,53 +172,55 @@ export default function ProjectDetail() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link to="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
+        <div className="container mx-auto px-4 h-14 sm:h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+            <Link to="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
               <ArrowLeft className="w-5 h-5" />
             </Link>
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 gradient-primary rounded-lg flex items-center justify-center">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 gradient-primary rounded-lg flex items-center justify-center flex-shrink-0">
                 <span className="text-lg font-bold text-primary-foreground">S</span>
               </div>
-              <div>
-                <h1 className="font-semibold">{project.name}</h1>
-                <p className="text-xs text-muted-foreground">{project.primary_domain}</p>
+              <div className="min-w-0">
+                <h1 className="font-semibold truncate">{project.name}</h1>
+                <p className="text-xs text-muted-foreground truncate">{project.primary_domain}</p>
               </div>
             </div>
           </div>
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" className="flex-shrink-0">
             <Settings className="w-4 h-4" />
           </Button>
         </div>
       </header>
 
       {/* Main */}
-      <main className="container mx-auto px-4 py-8">
-        <Tabs defaultValue="campaigns" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="campaigns" className="gap-2">
-              <BarChart3 className="w-4 h-4" />
-              Campaigns
+      <main className="container mx-auto px-4 py-6 sm:py-8">
+        <Tabs defaultValue="campaigns" className="space-y-4 sm:space-y-6">
+          <TabsList className="w-full sm:w-auto grid grid-cols-3 sm:flex">
+            <TabsTrigger value="campaigns" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+              <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Campaigns</span>
+              <span className="sm:hidden">Campaigns</span>
             </TabsTrigger>
-            <TabsTrigger value="snippet" className="gap-2">
-              <Code className="w-4 h-4" />
-              Install Snippet
+            <TabsTrigger value="snippet" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+              <Code className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Install Snippet</span>
+              <span className="sm:hidden">Snippet</span>
             </TabsTrigger>
-            <TabsTrigger value="settings" className="gap-2">
-              <Settings className="w-4 h-4" />
-              Settings
+            <TabsTrigger value="settings" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+              <Settings className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span>Settings</span>
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="campaigns" className="space-y-6">
-            <div className="flex items-center justify-between">
+          <TabsContent value="campaigns" className="space-y-4 sm:space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h2 className="text-2xl font-bold">Campaigns</h2>
-                <p className="text-muted-foreground">Manage your split test campaigns</p>
+                <h2 className="text-xl sm:text-2xl font-bold">Campaigns</h2>
+                <p className="text-sm text-muted-foreground">Manage your split test campaigns</p>
               </div>
-              <Link to={`/project/${id}/campaign/new`}>
-                <Button>
+              <Link to={`/project/${id}/campaign/new`} className="w-full sm:w-auto">
+                <Button className="w-full sm:w-auto">
                   <Plus className="w-4 h-4 mr-2" />
                   New Campaign
                 </Button>
@@ -250,19 +252,19 @@ export default function ProjectDetail() {
                 {campaigns?.map((campaign) => (
                   <Card key={campaign.id} className="hover:shadow-medium transition-all duration-200">
                     <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-3">
-                            <CardTitle className="text-lg">{campaign.name}</CardTitle>
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <CardTitle className="text-base sm:text-lg truncate">{campaign.name}</CardTitle>
                             <Badge variant={statusVariantMap[campaign.status as CampaignStatus]}>
                               {campaign.status}
                             </Badge>
                           </div>
-                          <CardDescription>
+                          <CardDescription className="text-xs sm:text-sm">
                             {campaign.variants?.length || 0} variants · Created {new Date(campaign.created_at).toLocaleDateString()}
                           </CardDescription>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           {campaign.status === 'active' ? (
                             <Button 
                               variant="outline" 
@@ -270,8 +272,8 @@ export default function ProjectDetail() {
                               onClick={() => handleStatusChange(campaign.id, 'paused', campaign.name)}
                               disabled={updateCampaign.isPending}
                             >
-                              <Pause className="w-4 h-4 mr-1" />
-                              Pause
+                              <Pause className="w-4 h-4 sm:mr-1" />
+                              <span className="hidden sm:inline">Pause</span>
                             </Button>
                           ) : campaign.status === 'draft' || campaign.status === 'paused' ? (
                             <Button 
@@ -280,15 +282,15 @@ export default function ProjectDetail() {
                               onClick={() => handleStatusChange(campaign.id, 'active', campaign.name)}
                               disabled={updateCampaign.isPending}
                             >
-                              <Play className="w-4 h-4 mr-1" />
-                              Start
+                              <Play className="w-4 h-4 sm:mr-1" />
+                              <span className="hidden sm:inline">Start</span>
                             </Button>
                           ) : null}
                           
                           <Link to={`/project/${id}/campaign/${campaign.id}/edit`}>
                             <Button variant="outline" size="sm">
-                              <Pencil className="w-4 h-4 mr-1" />
-                              Edit
+                              <Pencil className="w-4 h-4 sm:mr-1" />
+                              <span className="hidden sm:inline">Edit</span>
                             </Button>
                           </Link>
                           
@@ -335,8 +337,8 @@ export default function ProjectDetail() {
                           
                           <Link to={`/project/${id}/campaign/${campaign.id}`}>
                             <Button size="sm">
-                              <BarChart3 className="w-4 h-4 mr-1" />
-                              Analytics
+                              <BarChart3 className="w-4 h-4 sm:mr-1" />
+                              <span className="hidden sm:inline">Analytics</span>
                             </Button>
                           </Link>
                         </div>
