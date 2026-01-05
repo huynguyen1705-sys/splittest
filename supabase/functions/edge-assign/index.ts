@@ -212,20 +212,32 @@ Deno.serve(async (req) => {
       const selectedVariantId = selectVariant(matchedCampaign.variants);
       const selectedVariant = matchedCampaign.variants.find((v: { id: string }) => v.id === selectedVariantId);
       
-      // Build final URL with merged query parameters for DNT case
+      // Build final URL with path wildcard and query parameter merging for DNT case
       let dntFinalUrl = selectedVariant?.destination_url || '';
-      if (dntFinalUrl && originalQuery) {
+      if (dntFinalUrl) {
         try {
-          const destUrl = new URL(dntFinalUrl);
-          const origParams = new URLSearchParams(originalQuery);
-          origParams.forEach((value, key) => {
-            if (!destUrl.searchParams.has(key)) {
-              destUrl.searchParams.set(key, value);
-            }
-          });
-          dntFinalUrl = destUrl.toString();
+          // Handle path wildcard
+          if (dntFinalUrl.includes('/*')) {
+            const baseUrl = dntFinalUrl.replace('/*', '');
+            const destUrl = new URL(baseUrl);
+            const visitorPath = path.startsWith('/') ? path.slice(1) : path;
+            destUrl.pathname = destUrl.pathname.replace(/\/$/, '') + '/' + visitorPath;
+            dntFinalUrl = destUrl.toString();
+          }
+          
+          // Merge query params
+          if (originalQuery) {
+            const destUrl = new URL(dntFinalUrl);
+            const origParams = new URLSearchParams(originalQuery);
+            origParams.forEach((value, key) => {
+              if (!destUrl.searchParams.has(key)) {
+                destUrl.searchParams.set(key, value);
+              }
+            });
+            dntFinalUrl = destUrl.toString();
+          }
         } catch (e) {
-          console.warn('Failed to merge query params for DNT:', e);
+          console.warn('Failed to process URL for DNT:', e);
         }
       }
       
@@ -308,25 +320,41 @@ Deno.serve(async (req) => {
 
     const selectedVariant = matchedCampaign.variants.find((v: { id: string }) => v.id === selectedVariantId);
 
-    // Build final URL with merged query parameters
+    // Build final URL with path wildcard and query parameter merging
     let finalUrl = selectedVariant?.destination_url || '';
-    if (finalUrl && originalQuery) {
+    if (finalUrl) {
       try {
-        const destUrl = new URL(finalUrl);
-        const origParams = new URLSearchParams(originalQuery);
+        // Handle path wildcard: if destination ends with /*, append visitor's path
+        if (finalUrl.includes('/*')) {
+          // Remove the /* from destination
+          const baseUrl = finalUrl.replace('/*', '');
+          const destUrl = new URL(baseUrl);
+          
+          // Append the visitor's path (remove leading slash to avoid double slashes)
+          const visitorPath = path.startsWith('/') ? path.slice(1) : path;
+          destUrl.pathname = destUrl.pathname.replace(/\/$/, '') + '/' + visitorPath;
+          
+          finalUrl = destUrl.toString();
+          console.log(`Path wildcard applied: ${selectedVariant?.destination_url} + ${path} -> ${finalUrl}`);
+        }
         
         // Merge original query params into destination URL
-        origParams.forEach((value, key) => {
-          // Don't override existing params in destination URL
-          if (!destUrl.searchParams.has(key)) {
-            destUrl.searchParams.set(key, value);
-          }
-        });
-        
-        finalUrl = destUrl.toString();
-        console.log(`Final URL with merged params: ${finalUrl}`);
+        if (originalQuery) {
+          const destUrl = new URL(finalUrl);
+          const origParams = new URLSearchParams(originalQuery);
+          
+          origParams.forEach((value, key) => {
+            // Don't override existing params in destination URL
+            if (!destUrl.searchParams.has(key)) {
+              destUrl.searchParams.set(key, value);
+            }
+          });
+          
+          finalUrl = destUrl.toString();
+          console.log(`Final URL with merged params: ${finalUrl}`);
+        }
       } catch (e) {
-        console.warn('Failed to merge query params:', e);
+        console.warn('Failed to process URL:', e);
       }
     }
 
