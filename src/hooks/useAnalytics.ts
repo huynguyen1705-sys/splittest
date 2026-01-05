@@ -198,6 +198,18 @@ export function useRealtimeEvents(campaignId: string | undefined) {
     browser: string | null;
     variant_id: string | null;
   }>>([]);
+  const [newEventCount, setNewEventCount] = useState(0);
+  const [lastEventTime, setLastEventTime] = useState<Date | null>(null);
+  const [isLive, setIsLive] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Reset new event count after 3 seconds
+  useEffect(() => {
+    if (newEventCount > 0) {
+      const timer = setTimeout(() => setNewEventCount(0), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [newEventCount]);
 
   useEffect(() => {
     if (!campaignId) return;
@@ -213,7 +225,12 @@ export function useRealtimeEvents(campaignId: string | undefined) {
         .order('ts', { ascending: false })
         .limit(50);
       
-      if (data) setEvents(data);
+      if (data) {
+        setEvents(data);
+        if (data.length > 0) {
+          setLastEventTime(new Date(data[0].ts));
+        }
+      }
     };
 
     fetchRecent();
@@ -231,11 +248,22 @@ export function useRealtimeEvents(campaignId: string | undefined) {
           const cutoff = Date.now() - 60000;
           return [newEvent, ...prev].filter((e) => new Date(e.ts).getTime() > cutoff).slice(0, 100);
         });
+        setNewEventCount(prev => prev + 1);
+        setLastEventTime(new Date(newEvent.ts));
+        setIsLive(true);
+        
+        // Invalidate analytics to refresh stats
+        queryClient.invalidateQueries({ queryKey: ['analytics', campaignId] });
       })
-      .subscribe();
+      .subscribe((status) => {
+        setIsLive(status === 'SUBSCRIBED');
+      });
 
-    return () => { supabase.removeChannel(channel); };
-  }, [campaignId]);
+    return () => { 
+      supabase.removeChannel(channel);
+      setIsLive(false);
+    };
+  }, [campaignId, queryClient]);
 
-  return events;
+  return { events, newEventCount, lastEventTime, isLive };
 }

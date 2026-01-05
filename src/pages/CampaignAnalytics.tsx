@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Play, Pause, Activity, Users, CheckCircle, XCircle, Clock, Globe, Monitor, Chrome, Settings } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Activity, Users, CheckCircle, XCircle, Clock, Globe, Monitor, Chrome, Settings, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { CampaignStatus } from '@/types/database';
 
@@ -29,7 +29,7 @@ export default function CampaignAnalytics() {
   const updateCampaign = useUpdateCampaign();
   const [timeRange, setTimeRange] = useState<'1h' | '24h' | '7d'>('24h');
   const { data: analytics, isLoading: analyticsLoading } = useAnalytics(campaignId, timeRange);
-  const realtimeEvents = useRealtimeEvents(campaignId);
+  const { events: realtimeEvents, newEventCount, lastEventTime, isLive } = useRealtimeEvents(campaignId);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -134,11 +134,53 @@ export default function CampaignAnalytics() {
 
       {/* Main */}
       <main className="container mx-auto px-4 py-8">
+        {/* Realtime Indicator */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+              isLive ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'
+            }`}>
+              {isLive ? (
+                <>
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+                  </span>
+                  <span>Live</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-3 h-3" />
+                  <span>Connecting...</span>
+                </>
+              )}
+            </div>
+            {newEventCount > 0 && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm animate-in slide-in-from-left-2">
+                <Activity className="w-3 h-3" />
+                <span>+{newEventCount} new</span>
+              </div>
+            )}
+            {lastEventTime && (
+              <span className="text-xs text-muted-foreground">
+                Last event: {lastEventTime.toLocaleTimeString()}
+              </span>
+            )}
+          </div>
+        </div>
+
         <Tabs defaultValue="overview" className="space-y-6">
           <div className="flex items-center justify-between">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="realtime">Real-Time</TabsTrigger>
+              <TabsTrigger value="realtime" className="relative">
+                Real-Time
+                {newEventCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full text-[10px] text-primary-foreground flex items-center justify-center">
+                    {newEventCount > 9 ? '9+' : newEventCount}
+                  </span>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="breakdown">Breakdown</TabsTrigger>
             </TabsList>
             <Select value={timeRange} onValueChange={(v) => setTimeRange(v as typeof timeRange)}>
