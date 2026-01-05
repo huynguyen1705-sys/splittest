@@ -34,6 +34,7 @@ export default function CampaignAnalytics() {
   const { events: realtimeEvents, newEventCount, lastEventTime, isLive } = useRealtimeEvents(campaignId);
   const navigate = useNavigate();
   const [isSendingTestEvent, setIsSendingTestEvent] = useState(false);
+  const [testEventType, setTestEventType] = useState<'assign' | 'redirect_ok' | 'redirect_fail'>('assign');
 
   const handleTestEvent = async () => {
     if (!campaignId || !projectId || !campaign?.variants?.length) {
@@ -51,24 +52,42 @@ export default function CampaignAnalytics() {
       const oses = ['windows', 'macos', 'ios', 'android'];
       const langs = ['en', 'th', 'vi', 'ja'];
 
-      const { error } = await supabase.from('events_raw').insert({
+      const eventData: any = {
         project_id: projectId,
         campaign_id: campaignId,
         variant_id: randomVariant.id,
-        event_type: 'assign',
+        event_type: testEventType,
         country: countries[Math.floor(Math.random() * countries.length)],
         device: devices[Math.floor(Math.random() * devices.length)],
         browser: browsers[Math.floor(Math.random() * browsers.length)],
         os: oses[Math.floor(Math.random() * oses.length)],
         lang: langs[Math.floor(Math.random() * langs.length)],
         path: '/test-event',
-      });
+      };
+
+      // Add time_to_redirect_ms for redirect events
+      if (testEventType === 'redirect_ok') {
+        eventData.time_to_redirect_ms = Math.floor(Math.random() * 500) + 50; // 50-550ms
+      }
+      
+      // Add error message for failed redirects
+      if (testEventType === 'redirect_fail') {
+        eventData.error_message = 'Test error: simulated redirect failure';
+      }
+
+      const { error } = await supabase.from('events_raw').insert(eventData);
 
       if (error) throw error;
       
+      const eventTypeLabels = {
+        assign: 'Assignment',
+        redirect_ok: 'Redirect Success',
+        redirect_fail: 'Redirect Failed'
+      };
+      
       toast({ 
-        title: 'Test event sent!', 
-        description: `Assigned to ${randomVariant.name}`,
+        title: `${eventTypeLabels[testEventType]} sent!`, 
+        description: `Variant: ${randomVariant.name}`,
       });
     } catch (error: any) {
       toast({ 
@@ -216,15 +235,42 @@ export default function CampaignAnalytics() {
               </span>
             )}
           </div>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleTestEvent}
-            disabled={isSendingTestEvent}
-          >
-            <Zap className="w-4 h-4 mr-2" />
-            {isSendingTestEvent ? 'Sending...' : 'Test Event'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Select value={testEventType} onValueChange={(v) => setTestEventType(v as typeof testEventType)}>
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="assign">
+                  <span className="flex items-center gap-2">
+                    <Users className="w-3 h-3" />
+                    Assign
+                  </span>
+                </SelectItem>
+                <SelectItem value="redirect_ok">
+                  <span className="flex items-center gap-2">
+                    <CheckCircle className="w-3 h-3 text-success" />
+                    Redirect OK
+                  </span>
+                </SelectItem>
+                <SelectItem value="redirect_fail">
+                  <span className="flex items-center gap-2">
+                    <XCircle className="w-3 h-3 text-destructive" />
+                    Redirect Fail
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleTestEvent}
+              disabled={isSendingTestEvent}
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              {isSendingTestEvent ? 'Sending...' : 'Send'}
+            </Button>
+          </div>
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
