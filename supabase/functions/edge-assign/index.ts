@@ -118,6 +118,7 @@ Deno.serve(async (req) => {
     const path = url.searchParams.get('path') || '/';
     const lang = url.searchParams.get('lang') || 'en';
     const dnt = url.searchParams.get('dnt') === '1';
+    const originalQuery = url.searchParams.get('oq') || ''; // Original query string from visitor URL
 
     if (!token) {
       return new Response(JSON.stringify({ error: 'Missing token' }), {
@@ -211,9 +212,26 @@ Deno.serve(async (req) => {
       const selectedVariantId = selectVariant(matchedCampaign.variants);
       const selectedVariant = matchedCampaign.variants.find((v: { id: string }) => v.id === selectedVariantId);
       
+      // Build final URL with merged query parameters for DNT case
+      let dntFinalUrl = selectedVariant?.destination_url || '';
+      if (dntFinalUrl && originalQuery) {
+        try {
+          const destUrl = new URL(dntFinalUrl);
+          const origParams = new URLSearchParams(originalQuery);
+          origParams.forEach((value, key) => {
+            if (!destUrl.searchParams.has(key)) {
+              destUrl.searchParams.set(key, value);
+            }
+          });
+          dntFinalUrl = destUrl.toString();
+        } catch (e) {
+          console.warn('Failed to merge query params for DNT:', e);
+        }
+      }
+      
       return new Response(JSON.stringify({
         shouldRedirect: true,
-        url: selectedVariant?.destination_url,
+        url: dntFinalUrl,
         campaignId: matchedCampaign.id,
         variantId: selectedVariantId,
         dnt: true,
@@ -290,6 +308,28 @@ Deno.serve(async (req) => {
 
     const selectedVariant = matchedCampaign.variants.find((v: { id: string }) => v.id === selectedVariantId);
 
+    // Build final URL with merged query parameters
+    let finalUrl = selectedVariant?.destination_url || '';
+    if (finalUrl && originalQuery) {
+      try {
+        const destUrl = new URL(finalUrl);
+        const origParams = new URLSearchParams(originalQuery);
+        
+        // Merge original query params into destination URL
+        origParams.forEach((value, key) => {
+          // Don't override existing params in destination URL
+          if (!destUrl.searchParams.has(key)) {
+            destUrl.searchParams.set(key, value);
+          }
+        });
+        
+        finalUrl = destUrl.toString();
+        console.log(`Final URL with merged params: ${finalUrl}`);
+      } catch (e) {
+        console.warn('Failed to merge query params:', e);
+      }
+    }
+
     // Log assignment event
     await supabase.from('events_raw').insert({
       project_id: project.id,
@@ -308,7 +348,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       shouldRedirect: true,
-      url: selectedVariant?.destination_url,
+      url: finalUrl,
       campaignId: matchedCampaign.id,
       variantId: selectedVariantId,
       visitorKey: actualVisitorKey,
