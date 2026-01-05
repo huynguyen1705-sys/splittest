@@ -215,15 +215,16 @@ export function useRealtimeEvents(campaignId: string | undefined) {
     if (!campaignId) return;
 
     // Real-time events still need events_raw for live data
+    const windowMs = 10 * 60 * 1000; // 10 minutes
     const fetchRecent = async () => {
-      const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
+      const since = new Date(Date.now() - windowMs).toISOString();
       const { data } = await supabase
         .from('events_raw')
         .select('id, event_type, ts, country, device, browser, variant_id')
         .eq('campaign_id', campaignId)
-        .gte('ts', sixtySecondsAgo)
+        .gte('ts', since)
         .order('ts', { ascending: false })
-        .limit(50);
+        .limit(200);
       
       if (data) {
         setEvents(data);
@@ -245,8 +246,8 @@ export function useRealtimeEvents(campaignId: string | undefined) {
       }, (payload) => {
         const newEvent = payload.new as typeof events[0];
         setEvents((prev) => {
-          const cutoff = Date.now() - 60000;
-          return [newEvent, ...prev].filter((e) => new Date(e.ts).getTime() > cutoff).slice(0, 100);
+          const cutoff = Date.now() - windowMs;
+          return [newEvent, ...prev].filter((e) => new Date(e.ts).getTime() > cutoff).slice(0, 300);
         });
         setNewEventCount(prev => prev + 1);
         setLastEventTime(new Date(newEvent.ts));

@@ -336,7 +336,7 @@ export default function CampaignAnalytics() {
                   </Badge>
                 </div>
                 <CardDescription>
-                  Showing events from the last 60 seconds • Auto-updates in real-time
+                  Showing events from the last 10 minutes • Auto-updates in real-time
                 </CardDescription>
               </CardHeader>
               <CardContent>
