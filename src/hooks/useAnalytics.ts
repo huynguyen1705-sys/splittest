@@ -1,9 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { AnalyticsData } from '@/types/database';
 
 export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '24h' | '7d' = '24h') {
+  const queryClient = useQueryClient();
+  
   return useQuery({
     queryKey: ['analytics', campaignId, timeRange],
     queryFn: async (): Promise<AnalyticsData> => {
@@ -23,15 +25,21 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
           startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       }
 
-      // Query aggregates_minute for pre-computed data
-      const { data: aggregates, error } = await supabase
+      // Try aggregates_minute first for efficiency
+      const { data: aggregates, error: aggError } = await supabase
         .from('aggregates_minute')
         .select('*')
         .eq('campaign_id', campaignId)
         .gte('minute_ts', startTime.toISOString())
         .order('minute_ts', { ascending: true });
 
-      if (error) throw error;
+      // Also get raw events for real-time data (last 5 minutes are most likely not aggregated)
+      const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+      const { data: recentEvents, error: eventsError } = await supabase
+        .from('events_raw')
+        .select('*')
+        .eq('campaign_id', campaignId)
+        .gte('ts', fiveMinutesAgo.toISOString());
 
       const analytics: AnalyticsData = {
         totalAssigns: 0,
@@ -50,8 +58,18 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
       let totalTTR = 0;
       let ttrCount = 0;
       const timeSeriesMap = new Map<string, { assigns: number; redirectsOk: number }>();
+      const processedMinutes = new Set<string>();
 
+      // Process aggregates (exclude last 5 minutes to avoid double counting)
       (aggregates || []).forEach((agg) => {
+        const aggMinute = agg.minute_ts.slice(0, 16);
+        if (new Date(agg.minute_ts) >= fiveMinutesAgo) {
+          // Skip recent data - we'll get it from raw events
+          return;
+        }
+        
+        processedMinutes.add(aggMinute);
+        
         // Sum up totals
         analytics.totalAssigns += agg.assigns || 0;
         analytics.totalRedirectsOk += agg.redirects_ok || 0;
@@ -91,10 +109,10 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
           analytics.byLang[agg.lang] = (analytics.byLang[agg.lang] || 0) + assigns;
         }
 
-        // Time series - group by hour or minute depending on range
+        // Time series
         const tsKey = timeRange === '1h' 
-          ? agg.minute_ts.slice(0, 16) // minute granularity
-          : agg.minute_ts.slice(0, 13); // hour granularity
+          ? agg.minute_ts.slice(0, 16)
+          : agg.minute_ts.slice(0, 13);
         
         if (!timeSeriesMap.has(tsKey)) {
           timeSeriesMap.set(tsKey, { assigns: 0, redirectsOk: 0 });
@@ -102,6 +120,60 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
         const ts = timeSeriesMap.get(tsKey)!;
         ts.assigns += agg.assigns || 0;
         ts.redirectsOk += agg.redirects_ok || 0;
+      });
+
+      // Process recent raw events (for real-time display)
+      (recentEvents || []).forEach((event) => {
+        switch (event.event_type) {
+          case 'assign':
+            analytics.totalAssigns += 1;
+            if (event.variant_id) {
+              if (!analytics.byVariant[event.variant_id]) {
+                analytics.byVariant[event.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0 };
+              }
+              analytics.byVariant[event.variant_id].assigns += 1;
+            }
+            if (event.country) analytics.byCountry[event.country] = (analytics.byCountry[event.country] || 0) + 1;
+            if (event.device) analytics.byDevice[event.device] = (analytics.byDevice[event.device] || 0) + 1;
+            if (event.browser) analytics.byBrowser[event.browser] = (analytics.byBrowser[event.browser] || 0) + 1;
+            if (event.os) analytics.byOS[event.os] = (analytics.byOS[event.os] || 0) + 1;
+            if (event.lang) analytics.byLang[event.lang] = (analytics.byLang[event.lang] || 0) + 1;
+            break;
+          case 'redirect_ok':
+            analytics.totalRedirectsOk += 1;
+            if (event.variant_id) {
+              if (!analytics.byVariant[event.variant_id]) {
+                analytics.byVariant[event.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0 };
+              }
+              analytics.byVariant[event.variant_id].redirectsOk += 1;
+            }
+            if (event.time_to_redirect_ms) {
+              totalTTR += event.time_to_redirect_ms;
+              ttrCount += 1;
+            }
+            break;
+          case 'redirect_fail':
+            analytics.totalRedirectsFail += 1;
+            if (event.variant_id) {
+              if (!analytics.byVariant[event.variant_id]) {
+                analytics.byVariant[event.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0 };
+              }
+              analytics.byVariant[event.variant_id].redirectsFail += 1;
+            }
+            break;
+        }
+
+        // Add to time series
+        const tsKey = timeRange === '1h' 
+          ? event.ts.slice(0, 16)
+          : event.ts.slice(0, 13);
+        
+        if (!timeSeriesMap.has(tsKey)) {
+          timeSeriesMap.set(tsKey, { assigns: 0, redirectsOk: 0 });
+        }
+        const ts = timeSeriesMap.get(tsKey)!;
+        if (event.event_type === 'assign') ts.assigns += 1;
+        if (event.event_type === 'redirect_ok') ts.redirectsOk += 1;
       });
 
       analytics.avgTimeToRedirect = ttrCount > 0 ? Math.round(totalTTR / ttrCount) : 0;
@@ -112,7 +184,7 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
       return analytics;
     },
     enabled: !!campaignId,
-    refetchInterval: 30000,
+    refetchInterval: 10000, // Refresh every 10 seconds for more real-time feel
   });
 }
 
