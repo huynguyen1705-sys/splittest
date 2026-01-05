@@ -9,9 +9,11 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Play, Pause, Activity, Users, CheckCircle, XCircle, Clock, Globe, Monitor, Chrome, Settings, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Activity, Users, CheckCircle, XCircle, Clock, Globe, Monitor, Chrome, Settings, Wifi, WifiOff, RefreshCw, Zap } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { CampaignStatus } from '@/types/database';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 
 const COLORS = ['hsl(239, 84%, 67%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(199, 89%, 48%)', 'hsl(280, 68%, 60%)'];
 
@@ -31,6 +33,53 @@ export default function CampaignAnalytics() {
   const { data: analytics, isLoading: analyticsLoading } = useAnalytics(campaignId, timeRange);
   const { events: realtimeEvents, newEventCount, lastEventTime, isLive } = useRealtimeEvents(campaignId);
   const navigate = useNavigate();
+  const [isSendingTestEvent, setIsSendingTestEvent] = useState(false);
+
+  const handleTestEvent = async () => {
+    if (!campaignId || !projectId || !campaign?.variants?.length) {
+      toast({ title: 'Error', description: 'No variants available', variant: 'destructive' });
+      return;
+    }
+
+    setIsSendingTestEvent(true);
+    try {
+      // Pick a random variant
+      const randomVariant = campaign.variants[Math.floor(Math.random() * campaign.variants.length)];
+      const countries = ['TH', 'VN', 'US', 'JP', 'SG'];
+      const devices = ['desktop', 'mobile', 'tablet'];
+      const browsers = ['chrome', 'safari', 'firefox', 'edge'];
+      const oses = ['windows', 'macos', 'ios', 'android'];
+      const langs = ['en', 'th', 'vi', 'ja'];
+
+      const { error } = await supabase.from('events_raw').insert({
+        project_id: projectId,
+        campaign_id: campaignId,
+        variant_id: randomVariant.id,
+        event_type: 'assign',
+        country: countries[Math.floor(Math.random() * countries.length)],
+        device: devices[Math.floor(Math.random() * devices.length)],
+        browser: browsers[Math.floor(Math.random() * browsers.length)],
+        os: oses[Math.floor(Math.random() * oses.length)],
+        lang: langs[Math.floor(Math.random() * langs.length)],
+        path: '/test-event',
+      });
+
+      if (error) throw error;
+      
+      toast({ 
+        title: 'Test event sent!', 
+        description: `Assigned to ${randomVariant.name}`,
+      });
+    } catch (error: any) {
+      toast({ 
+        title: 'Error', 
+        description: error.message || 'Failed to send test event', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setIsSendingTestEvent(false);
+    }
+  };
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -167,6 +216,15 @@ export default function CampaignAnalytics() {
               </span>
             )}
           </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleTestEvent}
+            disabled={isSendingTestEvent}
+          >
+            <Zap className="w-4 h-4 mr-2" />
+            {isSendingTestEvent ? 'Sending...' : 'Test Event'}
+          </Button>
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
