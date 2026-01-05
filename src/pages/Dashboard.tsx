@@ -1,24 +1,44 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { useProjects, useCreateProject } from '@/hooks/useProjects';
+import { useProjects, useCreateProject, useDeleteProject } from '@/hooks/useProjects';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, FolderOpen, Globe, LogOut, Settings } from 'lucide-react';
+import { Plus, FolderOpen, Globe, LogOut, MoreVertical, Trash2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useState } from 'react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function Dashboard() {
   const { user, loading: authLoading, signOut } = useAuth();
   const { data: projects, isLoading } = useProjects();
   const createProject = useCreateProject();
+  const deleteProject = useDeleteProject();
   const navigate = useNavigate();
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDomain, setNewProjectDomain] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null);
+
+  const handleDeleteProject = async () => {
+    if (!projectToDelete) return;
+    await deleteProject.mutateAsync(projectToDelete.id);
+    setDeleteDialogOpen(false);
+    setProjectToDelete(null);
+  };
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -145,31 +165,67 @@ export default function Dashboard() {
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {projects?.map((project) => (
-              <Link key={project.id} to={`/project/${project.id}`}>
-                <Card className="hover:shadow-medium transition-all duration-200 hover:-translate-y-1 cursor-pointer h-full">
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
-                        <Globe className="w-5 h-5 text-accent-foreground" />
-                      </div>
-                      <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100">
-                        <Settings className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    <CardTitle className="mt-4">{project.name}</CardTitle>
-                    <CardDescription>{project.primary_domain}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">
-                      Created {new Date(project.created_at).toLocaleDateString()}
-                    </p>
-                  </CardContent>
-                </Card>
-              </Link>
+              <Card key={project.id} className="hover:shadow-medium transition-all duration-200 hover:-translate-y-1 h-full">
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <Link to={`/project/${project.id}`} className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
+                      <Globe className="w-5 h-5 text-accent-foreground" />
+                    </Link>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreVertical className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem 
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => {
+                            setProjectToDelete({ id: project.id, name: project.name });
+                            setDeleteDialogOpen(true);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete Project
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <Link to={`/project/${project.id}`}>
+                    <CardTitle className="mt-4 hover:text-primary transition-colors">{project.name}</CardTitle>
+                  </Link>
+                  <CardDescription>{project.primary_domain}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Link to={`/project/${project.id}`} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    Created {new Date(project.created_at).toLocaleDateString()}
+                  </Link>
+                </CardContent>
+              </Card>
             ))}
           </div>
         )}
       </main>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Project</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{projectToDelete?.name}"? This action cannot be undone and will remove all campaigns, variants, and analytics data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteProject}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteProject.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
