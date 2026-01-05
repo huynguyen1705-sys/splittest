@@ -40,6 +40,19 @@ export default function Dashboard() {
     setProjectToDelete(null);
   };
 
+  // Helper to extract and format domain from URL
+  const formatDomain = (url: string) => {
+    try {
+      // Remove protocol if present
+      let domain = url.replace(/^https?:\/\//, '');
+      // Remove path and query params
+      domain = domain.split('/')[0].split('?')[0];
+      return domain;
+    } catch {
+      return url;
+    }
+  };
+
   useEffect(() => {
     if (!authLoading && !user) {
       navigate('/auth');
@@ -194,7 +207,7 @@ export default function Dashboard() {
                   <Link to={`/project/${project.id}`}>
                     <CardTitle className="mt-4 hover:text-primary transition-colors">{project.name}</CardTitle>
                   </Link>
-                  <CardDescription>{project.primary_domain}</CardDescription>
+                  <CardDescription className="truncate">{formatDomain(project.primary_domain)}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Link to={`/project/${project.id}`} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
