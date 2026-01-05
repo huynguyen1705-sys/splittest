@@ -89,16 +89,16 @@ export default function Dashboard() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="container mx-auto px-4 h-14 sm:h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-3">
             <div className="w-8 h-8 gradient-primary rounded-lg flex items-center justify-center">
               <span className="text-lg font-bold text-primary-foreground">S</span>
             </div>
-            <span className="text-xl font-semibold">SplitFlow</span>
+            <span className="text-lg sm:text-xl font-semibold">SplitFlow</span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground">{user?.email}</span>
-            <Button variant="ghost" size="icon" onClick={handleSignOut}>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="text-sm text-muted-foreground hidden sm:inline">{user?.email}</span>
+            <Button variant="ghost" size="icon" onClick={handleSignOut} title={user?.email}>
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
@@ -106,20 +106,20 @@ export default function Dashboard() {
       </header>
 
       {/* Main */}
-      <main className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
+      <main className="container mx-auto px-4 py-6 sm:py-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
           <div>
-            <h1 className="text-3xl font-bold">Projects</h1>
-            <p className="text-muted-foreground mt-1">Manage your websites and split tests</p>
+            <h1 className="text-2xl sm:text-3xl font-bold">Projects</h1>
+            <p className="text-sm sm:text-base text-muted-foreground mt-1">Manage your websites and split tests</p>
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className="w-full sm:w-auto">
                 <Plus className="w-4 h-4 mr-2" />
                 New Project
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="mx-4 sm:mx-auto max-w-md">
               <DialogHeader>
                 <DialogTitle>Create New Project</DialogTitle>
               </DialogHeader>
@@ -153,7 +153,7 @@ export default function Dashboard() {
         </div>
 
         {isLoading ? (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 sm:gap-6">
             {[1, 2, 3].map((i) => (
               <Card key={i}>
                 <CardHeader>
@@ -176,7 +176,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 sm:gap-6">
             {projects?.map((project) => (
               <Card key={project.id} className="hover:shadow-medium transition-all duration-200 hover:-translate-y-1 h-full">
                 <CardHeader>
