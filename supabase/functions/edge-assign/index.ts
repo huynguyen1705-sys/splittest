@@ -104,8 +104,13 @@ function matchesRules(
       
       switch (matchMode) {
         case 'exact_path':
-          // Exact path match - ignore query params, no wildcard support
-          // /quang-cao-in/ matches only /quang-cao-in/ or /quang-cao-in
+          // Exact path match - ONLY matches when NO query params are present
+          // /quang-cao-in/ matches only /quang-cao-in/ (without ?utm_source=..., ?gclid=..., etc.)
+          // If visitor URL has query params, it does NOT match
+          if (context.query && context.query.length > 0) {
+            console.log(`exact_path: Query params present ("${context.query}"), no match`);
+            return false;
+          }
           const normalizedPath = normalizePath(context.path);
           const normalizedPattern = normalizePath(pattern.replace(/\*$/, '')); // Remove trailing * if present
           const exactMatch = normalizedPath === normalizedPattern;
