@@ -41,6 +41,13 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
         .eq('campaign_id', campaignId)
         .gte('ts', fiveMinutesAgo.toISOString());
 
+      // Fetch UTM data from sessions table
+      const { data: sessionsData } = await supabase
+        .from('sessions')
+        .select('utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer')
+        .eq('project_id', (await supabase.from('campaigns').select('project_id').eq('id', campaignId).single()).data?.project_id || '')
+        .gte('started_at', startTime.toISOString());
+
       const analytics: AnalyticsData = {
         totalAssigns: 0,
         totalRedirectsOk: 0,
@@ -55,8 +62,37 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
         byBrowser: {},
         byOS: {},
         byLang: {},
+        byUtmSource: {},
+        byUtmMedium: {},
+        byUtmCampaign: {},
+        byReferrer: {},
         timeSeries: [],
       };
+
+      // Process UTM data from sessions
+      (sessionsData || []).forEach((session) => {
+        if (session.utm_source) {
+          analytics.byUtmSource[session.utm_source] = (analytics.byUtmSource[session.utm_source] || 0) + 1;
+        } else if (session.gclid) {
+          analytics.byUtmSource['google'] = (analytics.byUtmSource['google'] || 0) + 1;
+        } else if (session.fbclid) {
+          analytics.byUtmSource['facebook'] = (analytics.byUtmSource['facebook'] || 0) + 1;
+        }
+        if (session.utm_medium) {
+          analytics.byUtmMedium[session.utm_medium] = (analytics.byUtmMedium[session.utm_medium] || 0) + 1;
+        }
+        if (session.utm_campaign) {
+          analytics.byUtmCampaign[session.utm_campaign] = (analytics.byUtmCampaign[session.utm_campaign] || 0) + 1;
+        }
+        if (session.referrer) {
+          try {
+            const domain = new URL(session.referrer).hostname.replace('www.', '');
+            analytics.byReferrer[domain] = (analytics.byReferrer[domain] || 0) + 1;
+          } catch {
+            analytics.byReferrer[session.referrer] = (analytics.byReferrer[session.referrer] || 0) + 1;
+          }
+        }
+      });
 
       let totalTTR = 0;
       let ttrCount = 0;
