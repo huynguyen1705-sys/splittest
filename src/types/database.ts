@@ -152,7 +152,6 @@ export interface AnalyticsData {
   totalRedirectsOk: number;
   totalRedirectsFail: number;
   avgTimeToRedirect: number;
-  // NEW: Unique metrics
   uniqueVisitors: number;
   uniqueSessions: number;
   redirectSuccessRate: number;
@@ -167,5 +166,9 @@ export interface AnalyticsData {
   byBrowser: Record<string, number>;
   byOS: Record<string, number>;
   byLang: Record<string, number>;
+  byUtmSource: Record<string, number>;
+  byUtmMedium: Record<string, number>;
+  byUtmCampaign: Record<string, number>;
+  byReferrer: Record<string, number>;
   timeSeries: { ts: string; assigns: number; redirectsOk: number; uniqueVisitors?: number }[];
 }

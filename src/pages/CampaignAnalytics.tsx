@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Play, Pause, Activity, Users, CheckCircle, XCircle, Clock, Globe, Monitor, Chrome, Settings, Wifi, WifiOff, RefreshCw, Zap, TrendingUp, Percent } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Activity, Users, CheckCircle, XCircle, Clock, Globe, Monitor, Chrome, Settings, Wifi, WifiOff, RefreshCw, Zap, TrendingUp, Percent, Share2, Link2, Megaphone } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { CampaignStatus } from '@/types/database';
 import { supabase } from '@/integrations/supabase/client';
@@ -155,6 +155,27 @@ export default function CampaignAnalytics() {
   const browserData = Object.entries(analytics?.byBrowser || {})
     .map(([name, value]) => ({ name, value }));
 
+  // UTM data
+  const utmSourceData = Object.entries(analytics?.byUtmSource || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([name, value]) => ({ name: name || 'Direct', value }));
+
+  const utmMediumData = Object.entries(analytics?.byUtmMedium || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([name, value]) => ({ name, value }));
+
+  const utmCampaignData = Object.entries(analytics?.byUtmCampaign || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([name, value]) => ({ name, value }));
+
+  const referrerData = Object.entries(analytics?.byReferrer || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([name, value]) => ({ name, value }));
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -278,6 +299,7 @@ export default function CampaignAnalytics() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <TabsList className="w-full sm:w-auto">
               <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
+              <TabsTrigger value="traffic" className="text-xs sm:text-sm">Traffic Sources</TabsTrigger>
               <TabsTrigger value="realtime" className="relative text-xs sm:text-sm">
                 Real-Time
                 {newEventCount > 0 && (
@@ -511,6 +533,180 @@ export default function CampaignAnalytics() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Traffic Sources Tab */}
+          <TabsContent value="traffic" className="space-y-6">
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* UTM Source */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Share2 className="w-5 h-5" />
+                    Traffic Source (utm_source)
+                  </CardTitle>
+                  <CardDescription>
+                    Where your traffic comes from (Google, Facebook, etc.)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {utmSourceData.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground text-sm">No UTM data yet</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Use ?utm_source=google in your URLs
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {utmSourceData.map((item, i) => {
+                        const total = utmSourceData.reduce((s, x) => s + x.value, 0);
+                        const percent = total > 0 ? (item.value / total) * 100 : 0;
+                        return (
+                          <div key={item.name} className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="font-medium flex items-center gap-2">
+                                {item.name === 'google' && <span className="text-red-500">●</span>}
+                                {item.name === 'facebook' && <span className="text-blue-500">●</span>}
+                                {!['google', 'facebook'].includes(item.name) && (
+                                  <span style={{ color: COLORS[i % COLORS.length] }}>●</span>
+                                )}
+                                {item.name}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {item.value} ({percent.toFixed(1)}%)
+                              </span>
+                            </div>
+                            <div className="h-2 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{
+                                  width: `${percent}%`,
+                                  backgroundColor:
+                                    item.name === 'google' ? '#ea4335' :
+                                    item.name === 'facebook' ? '#1877f2' :
+                                    COLORS[i % COLORS.length],
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* UTM Medium */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Megaphone className="w-5 h-5" />
+                    Medium (utm_medium)
+                  </CardTitle>
+                  <CardDescription>
+                    How traffic reached you (cpc, social, email, etc.)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {utmMediumData.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground text-sm">No medium data yet</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Use ?utm_medium=cpc in your URLs
+                      </p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={200}>
+                      <PieChart>
+                        <Pie
+                          data={utmMediumData}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={80}
+                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        >
+                          {utmMediumData.map((_, i) => (
+                            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* UTM Campaign */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5" />
+                    Campaign (utm_campaign)
+                  </CardTitle>
+                  <CardDescription>
+                    Which ad campaigns are driving traffic
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {utmCampaignData.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground text-sm">No campaign data yet</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Use ?utm_campaign=summer_sale in your URLs
+                      </p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={utmCampaignData} layout="vertical">
+                        <XAxis type="number" className="text-xs" />
+                        <YAxis type="category" dataKey="name" className="text-xs" width={100} />
+                        <Tooltip />
+                        <Bar dataKey="value" fill="hsl(var(--primary))" radius={4} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Referrer Domains */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Link2 className="w-5 h-5" />
+                    Referrer Domains
+                  </CardTitle>
+                  <CardDescription>
+                    Websites that linked to your page
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {referrerData.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground text-sm">No referrer data yet</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Direct traffic doesn't have referrers
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {referrerData.map((item, i) => (
+                        <div key={item.name} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
+                          <span className="text-sm font-medium truncate flex-1 mr-2" title={item.name}>
+                            {item.name}
+                          </span>
+                          <Badge variant="secondary" className="text-xs">
+                            {item.value}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="breakdown" className="space-y-6">
