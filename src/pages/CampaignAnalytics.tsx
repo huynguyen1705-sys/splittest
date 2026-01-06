@@ -1,19 +1,23 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { format } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
 import { useCampaign, useUpdateCampaign } from '@/hooks/useCampaigns';
-import { useAnalytics, useRealtimeEvents } from '@/hooks/useAnalytics';
+import { useAnalytics, useRealtimeEvents, TimeRangePreset, DateRange } from '@/hooks/useAnalytics';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Play, Pause, Activity, Users, CheckCircle, XCircle, Clock, Globe, Monitor, Chrome, Settings, Wifi, WifiOff, RefreshCw, Zap, TrendingUp, Percent, Share2, Link2, Megaphone } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ArrowLeft, Play, Pause, Activity, Users, CheckCircle, XCircle, Clock, Globe, Monitor, Chrome, Settings, Wifi, WifiOff, RefreshCw, Zap, TrendingUp, Percent, Share2, Link2, Megaphone, CalendarIcon } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { CampaignStatus } from '@/types/database';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 const COLORS = ['hsl(239, 84%, 67%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(199, 89%, 48%)', 'hsl(280, 68%, 60%)'];
 
@@ -29,8 +33,10 @@ export default function CampaignAnalytics() {
   const { user, loading: authLoading } = useAuth();
   const { data: campaign, isLoading } = useCampaign(campaignId);
   const updateCampaign = useUpdateCampaign();
-  const [timeRange, setTimeRange] = useState<'1h' | '24h' | '7d'>('24h');
-  const { data: analytics, isLoading: analyticsLoading } = useAnalytics(campaignId, timeRange);
+  const [timeRange, setTimeRange] = useState<TimeRangePreset>('24h');
+  const [customRange, setCustomRange] = useState<DateRange | undefined>();
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const { data: analytics, isLoading: analyticsLoading } = useAnalytics(campaignId, timeRange, customRange);
   const { events: realtimeEvents, newEventCount, lastEventTime, isLive } = useRealtimeEvents(campaignId);
   const navigate = useNavigate();
   const [isSendingTestEvent, setIsSendingTestEvent] = useState(false);
@@ -310,16 +316,73 @@ export default function CampaignAnalytics() {
               </TabsTrigger>
               <TabsTrigger value="breakdown" className="text-xs sm:text-sm">Breakdown</TabsTrigger>
             </TabsList>
-            <Select value={timeRange} onValueChange={(v) => setTimeRange(v as typeof timeRange)}>
-              <SelectTrigger className="w-full sm:w-32 h-8 sm:h-9 text-xs sm:text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1h">Last Hour</SelectItem>
-                <SelectItem value="24h">Last 24h</SelectItem>
-                <SelectItem value="7d">Last 7 Days</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2">
+              <Select 
+                value={timeRange} 
+                onValueChange={(v) => {
+                  setTimeRange(v as TimeRangePreset);
+                  if (v !== 'custom') {
+                    setCustomRange(undefined);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-full sm:w-36 h-8 sm:h-9 text-xs sm:text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1h">Last Hour</SelectItem>
+                  <SelectItem value="24h">Last 24h</SelectItem>
+                  <SelectItem value="7d">Last 7 Days</SelectItem>
+                  <SelectItem value="30d">Last 30 Days</SelectItem>
+                  <SelectItem value="custom">Custom Range</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              {timeRange === 'custom' && (
+                <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "h-8 sm:h-9 text-xs sm:text-sm justify-start text-left font-normal",
+                        !customRange && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {customRange?.from ? (
+                        customRange.to ? (
+                          <>
+                            {format(customRange.from, "MMM d")} - {format(customRange.to, "MMM d, yyyy")}
+                          </>
+                        ) : (
+                          format(customRange.from, "MMM d, yyyy")
+                        )
+                      ) : (
+                        <span>Pick dates</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="end">
+                    <Calendar
+                      mode="range"
+                      defaultMonth={customRange?.from}
+                      selected={customRange ? { from: customRange.from, to: customRange.to } : undefined}
+                      onSelect={(range) => {
+                        if (range?.from && range?.to) {
+                          setCustomRange({ from: range.from, to: range.to });
+                          setDatePickerOpen(false);
+                        } else if (range?.from) {
+                          setCustomRange({ from: range.from, to: range.from });
+                        }
+                      }}
+                      numberOfMonths={2}
+                      disabled={(date) => date > new Date()}
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
           </div>
 
           <TabsContent value="overview" className="space-y-4 sm:space-y-6">
