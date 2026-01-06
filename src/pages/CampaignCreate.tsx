@@ -44,6 +44,7 @@ export default function CampaignCreate() {
   const [selectedBrowsers, setSelectedBrowsers] = useState<string[]>([]);
   const [selectedOS, setSelectedOS] = useState<string[]>([]);
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
+  const [includePaths, setIncludePaths] = useState<string>('');
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -121,6 +122,7 @@ export default function CampaignCreate() {
           browser_in: selectedBrowsers,
           os_in: selectedOS,
           lang_in: selectedLanguages,
+          include_paths: includePaths.split('\n').map(p => p.trim()).filter(p => p),
         },
       });
       navigate(`/project/${projectId}`);
@@ -303,6 +305,31 @@ export default function CampaignCreate() {
 
         {step === 'targeting' && (
           <div className="space-y-6">
+            {/* Path Targeting - NEW */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Globe className="w-5 h-5" />
+                  Path Targeting
+                </CardTitle>
+                <CardDescription>
+                  Specify which URL paths this campaign should match. Leave empty to match all paths.
+                  Use <code className="text-xs bg-muted px-1 rounded">*</code> for wildcards (e.g., <code className="text-xs bg-muted px-1 rounded">/blog/*</code> matches all blog pages).
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <textarea
+                  value={includePaths}
+                  onChange={(e) => setIncludePaths(e.target.value)}
+                  placeholder={"/landing-page-1\n/promo/*\n/campaign/special"}
+                  className="w-full h-24 p-3 text-sm rounded-lg border border-border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <p className="text-xs text-muted-foreground mt-2">
+                  One path per line. Examples: <code>/exact-path</code>, <code>/prefix/*</code>
+                </p>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -482,6 +509,7 @@ export default function CampaignCreate() {
                 <div>
                   <h3 className="font-medium mb-2">Targeting</h3>
                   <ul className="text-sm text-muted-foreground space-y-1">
+                    <li>Paths: {includePaths.trim() ? includePaths.split('\n').filter(p => p.trim()).join(', ') : 'All'}</li>
                     <li>Countries: {selectedCountries.length ? selectedCountries.join(', ') : 'All'}</li>
                     <li>Devices: {selectedDevices.length ? selectedDevices.join(', ') : 'All'}</li>
                     <li>Browsers: {selectedBrowsers.length ? selectedBrowsers.join(', ') : 'All'}</li>

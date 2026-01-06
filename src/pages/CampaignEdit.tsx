@@ -46,6 +46,7 @@ export default function CampaignEdit() {
   const [selectedBrowsers, setSelectedBrowsers] = useState<string[]>([]);
   const [selectedOS, setSelectedOS] = useState<string[]>([]);
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
+  const [includePaths, setIncludePaths] = useState<string>('');
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
@@ -80,6 +81,7 @@ export default function CampaignEdit() {
         setSelectedBrowsers(rules.browser_in || []);
         setSelectedOS(rules.os_in || []);
         setSelectedLanguages(rules.lang_in || []);
+        setIncludePaths((rules.include_paths || []).join('\n'));
       }
       
       setInitialized(true);
@@ -159,6 +161,7 @@ export default function CampaignEdit() {
         browser_in: selectedBrowsers,
         os_in: selectedOS,
         lang_in: selectedLanguages,
+        include_paths: includePaths.split('\n').map(p => p.trim()).filter(p => p),
       },
     });
   };
@@ -355,6 +358,31 @@ export default function CampaignEdit() {
           </TabsContent>
 
           <TabsContent value="targeting" className="space-y-6">
+            {/* Path Targeting - NEW */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Globe className="w-5 h-5" />
+                  Path Targeting
+                </CardTitle>
+                <CardDescription>
+                  Specify which URL paths this campaign should match. Leave empty to match all paths.
+                  Use <code className="text-xs bg-muted px-1 rounded">*</code> for wildcards.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <textarea
+                  value={includePaths}
+                  onChange={(e) => setIncludePaths(e.target.value)}
+                  placeholder={"/landing-page-1\n/promo/*\n/campaign/special"}
+                  className="w-full h-24 p-3 text-sm rounded-lg border border-border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <p className="text-xs text-muted-foreground mt-2">
+                  One path per line. Examples: <code>/exact-path</code>, <code>/prefix/*</code>
+                </p>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">

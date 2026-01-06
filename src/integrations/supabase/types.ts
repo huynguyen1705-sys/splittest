@@ -29,6 +29,8 @@ export type Database = {
           project_id: string
           redirects_fail: number | null
           redirects_ok: number | null
+          unique_sessions: number | null
+          unique_visitors: number | null
           variant_id: string | null
         }
         Insert: {
@@ -45,6 +47,8 @@ export type Database = {
           project_id: string
           redirects_fail?: number | null
           redirects_ok?: number | null
+          unique_sessions?: number | null
+          unique_visitors?: number | null
           variant_id?: string | null
         }
         Update: {
@@ -61,6 +65,8 @@ export type Database = {
           project_id?: string
           redirects_fail?: number | null
           redirects_ok?: number | null
+          unique_sessions?: number | null
+          unique_visitors?: number | null
           variant_id?: string | null
         }
         Relationships: [
@@ -284,6 +290,7 @@ export type Database = {
           path: string | null
           project_id: string
           referrer: string | null
+          session_id: string | null
           time_to_redirect_ms: number | null
           ts: string
           user_agent: string | null
@@ -305,6 +312,7 @@ export type Database = {
           path?: string | null
           project_id: string
           referrer?: string | null
+          session_id?: string | null
           time_to_redirect_ms?: number | null
           ts?: string
           user_agent?: string | null
@@ -326,6 +334,7 @@ export type Database = {
           path?: string | null
           project_id?: string
           referrer?: string | null
+          session_id?: string | null
           time_to_redirect_ms?: number | null
           ts?: string
           user_agent?: string | null
@@ -421,6 +430,83 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      sessions: {
+        Row: {
+          browser: string | null
+          country: string | null
+          device: string | null
+          entry_page: string | null
+          exit_page: string | null
+          fbclid: string | null
+          gclid: string | null
+          id: string
+          is_bounced: boolean | null
+          last_activity_at: string | null
+          os: string | null
+          page_views: number | null
+          project_id: string
+          referrer: string | null
+          session_key: string
+          started_at: string | null
+          utm_campaign: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          visitor_key_hash: string
+        }
+        Insert: {
+          browser?: string | null
+          country?: string | null
+          device?: string | null
+          entry_page?: string | null
+          exit_page?: string | null
+          fbclid?: string | null
+          gclid?: string | null
+          id?: string
+          is_bounced?: boolean | null
+          last_activity_at?: string | null
+          os?: string | null
+          page_views?: number | null
+          project_id: string
+          referrer?: string | null
+          session_key: string
+          started_at?: string | null
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          visitor_key_hash: string
+        }
+        Update: {
+          browser?: string | null
+          country?: string | null
+          device?: string | null
+          entry_page?: string | null
+          exit_page?: string | null
+          fbclid?: string | null
+          gclid?: string | null
+          id?: string
+          is_bounced?: boolean | null
+          last_activity_at?: string | null
+          os?: string | null
+          page_views?: number | null
+          project_id?: string
+          referrer?: string | null
+          session_key?: string
+          started_at?: string | null
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          visitor_key_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sessions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       variants: {
         Row: {

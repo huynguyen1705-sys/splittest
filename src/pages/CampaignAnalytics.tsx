@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Play, Pause, Activity, Users, CheckCircle, XCircle, Clock, Globe, Monitor, Chrome, Settings, Wifi, WifiOff, RefreshCw, Zap } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Activity, Users, CheckCircle, XCircle, Clock, Globe, Monitor, Chrome, Settings, Wifi, WifiOff, RefreshCw, Zap, TrendingUp, Percent } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { CampaignStatus } from '@/types/database';
 import { supabase } from '@/integrations/supabase/client';
@@ -301,52 +301,62 @@ export default function CampaignAnalytics() {
           </div>
 
           <TabsContent value="overview" className="space-y-4 sm:space-y-6">
-            {/* KPI Cards */}
+            {/* KPI Cards - Updated with Unique Visitors */}
             <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
-              <Card>
+              {/* Unique Visitors - Primary metric */}
+              <Card className="border-primary/50">
                 <CardContent className="pt-4 sm:pt-6">
                   <div className="flex items-center gap-2 sm:gap-3">
                     <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                       <Users className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-xs sm:text-sm text-muted-foreground">Assigns</p>
-                      <p className="text-lg sm:text-2xl font-bold">{analytics?.totalAssigns.toLocaleString() || 0}</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">Unique Visitors</p>
+                      <p className="text-lg sm:text-2xl font-bold">{analytics?.uniqueVisitors?.toLocaleString() || 0}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Raw: {analytics?.totalAssigns.toLocaleString() || 0}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="pt-4 sm:pt-6">
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-success/10 flex items-center justify-center flex-shrink-0">
-                      <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-success" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs sm:text-sm text-muted-foreground">Success</p>
-                      <p className="text-lg sm:text-2xl font-bold">{analytics?.totalRedirectsOk.toLocaleString() || 0}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-4 sm:pt-6">
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-destructive/10 flex items-center justify-center flex-shrink-0">
-                      <XCircle className="w-4 h-4 sm:w-5 sm:h-5 text-destructive" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs sm:text-sm text-muted-foreground">Failed</p>
-                      <p className="text-lg sm:text-2xl font-bold">{analytics?.totalRedirectsFail.toLocaleString() || 0}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              {/* Sessions */}
               <Card>
                 <CardContent className="pt-4 sm:pt-6">
                   <div className="flex items-center gap-2 sm:gap-3">
                     <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-info/10 flex items-center justify-center flex-shrink-0">
-                      <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-info" />
+                      <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-info" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs sm:text-sm text-muted-foreground">Sessions</p>
+                      <p className="text-lg sm:text-2xl font-bold">{analytics?.uniqueSessions?.toLocaleString() || 0}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              {/* Redirect Success Rate */}
+              <Card>
+                <CardContent className="pt-4 sm:pt-6">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-success/10 flex items-center justify-center flex-shrink-0">
+                      <Percent className="w-4 h-4 sm:w-5 sm:h-5 text-success" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs sm:text-sm text-muted-foreground">Success Rate</p>
+                      <p className="text-lg sm:text-2xl font-bold">{analytics?.redirectSuccessRate || 0}%</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {analytics?.totalRedirectsOk.toLocaleString() || 0} / {(analytics?.totalRedirectsOk || 0) + (analytics?.totalRedirectsFail || 0)}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              {/* Avg TTR */}
+              <Card>
+                <CardContent className="pt-4 sm:pt-6">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-warning/10 flex items-center justify-center flex-shrink-0">
+                      <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-warning" />
                     </div>
                     <div className="min-w-0">
                       <p className="text-xs sm:text-sm text-muted-foreground">Avg. TTR</p>

@@ -384,7 +384,8 @@ export default function ProjectDetail() {
               </CardHeader>
               <CardContent>
                 {(() => {
-                  const instantSnippet = `<script>!function(){var d=document,s=localStorage,k="sf_vk",t="${project.publishable_token}",a="https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1",l=d.createElement("div"),q=location.search.slice(1);l.id="sf-loader";l.innerHTML='<div style="position:fixed;inset:0;background:#fff;z-index:999999;display:flex;align-items:center;justify-content:center"><div style="width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#3b82f6;border-radius:50%;animation:sf-spin 1s linear infinite"></div></div><style>@keyframes sf-spin{to{transform:rotate(360deg)}}</style>';d.documentElement.appendChild(l);fetch(a+"/edge-assign?token="+t+"&vk="+(s.getItem(k)||"")+"&path="+encodeURIComponent(location.pathname)+"&lang="+(navigator.language||"en").slice(0,2)+"&oq="+encodeURIComponent(q)).then(r=>r.json()).then(r=>{r.visitorKey&&s.setItem(k,r.visitorKey);r.shouldRedirect&&r.url?location.replace(r.url):l.remove()}).catch(()=>l.remove())}()</script>`;
+                  // Updated snippet with session tracking and deduplication
+                  const instantSnippet = `<script>!function(){var d=document,s=localStorage,ss=sessionStorage,k="sf_vk",sk="sf_sk",t="${project.publishable_token}",a="https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1",q=location.search.slice(1),p=location.pathname,c=ss.getItem("sf_c_"+p);if(c){location.replace(c);return}var sKey=ss.getItem(sk)||(ss.setItem(sk,crypto.randomUUID()),ss.getItem(sk));var l=d.createElement("div");l.id="sf-loader";l.innerHTML='<div style="position:fixed;inset:0;background:#fff;z-index:999999;display:flex;align-items:center;justify-content:center"><div style="width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#3b82f6;border-radius:50%;animation:sf-spin 1s linear infinite"></div></div><style>@keyframes sf-spin{to{transform:rotate(360deg)}}</style>';d.documentElement.appendChild(l);fetch(a+"/edge-assign?token="+t+"&vk="+(s.getItem(k)||"")+"&sk="+sKey+"&path="+encodeURIComponent(p)+"&lang="+(navigator.language||"en").slice(0,2)+"&oq="+encodeURIComponent(q)).then(r=>r.json()).then(r=>{r.visitorKey&&s.setItem(k,r.visitorKey);if(r.shouldRedirect&&r.url){if(!r.cached)ss.setItem("sf_c_"+p,r.url);location.replace(r.url)}else{l.remove()}}).catch(()=>l.remove())}()</script>`;
                   return (
                     <div className="relative">
                       <pre className="p-4 rounded-lg bg-sidebar text-sidebar-foreground text-sm overflow-x-auto">
@@ -402,7 +403,7 @@ export default function ProjectDetail() {
                         Copy
                       </Button>
                       <p className="text-xs text-muted-foreground mt-3">
-                        ~500 bytes • Loading overlay • Instant redirect with location.replace()
+                        ~650 bytes • Session deduplication • Prevents duplicate assigns on page refresh
                       </p>
                     </div>
                   );
@@ -419,7 +420,8 @@ export default function ProjectDetail() {
               </CardHeader>
               <CardContent>
                 {(() => {
-                  const minifiedSnippet = `<script>!function(){var s=localStorage,k="sf_vk",t="${project.publishable_token}",a="https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1",q=location.search.slice(1);fetch(a+"/edge-assign?token="+t+"&vk="+(s.getItem(k)||"")+"&path="+encodeURIComponent(location.pathname)+"&lang="+(navigator.language||"en").slice(0,2)+"&oq="+encodeURIComponent(q)).then(r=>r.json()).then(d=>{d.visitorKey&&s.setItem(k,d.visitorKey);d.shouldRedirect&&d.url&&location.replace(d.url)}).catch(()=>{})}()</script>`;
+                  // Basic snippet with session deduplication
+                  const minifiedSnippet = `<script>!function(){var s=localStorage,ss=sessionStorage,k="sf_vk",sk="sf_sk",t="${project.publishable_token}",a="https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1",q=location.search.slice(1),p=location.pathname,c=ss.getItem("sf_c_"+p);if(c){location.replace(c);return}var sKey=ss.getItem(sk)||(ss.setItem(sk,crypto.randomUUID()),ss.getItem(sk));fetch(a+"/edge-assign?token="+t+"&vk="+(s.getItem(k)||"")+"&sk="+sKey+"&path="+encodeURIComponent(p)+"&lang="+(navigator.language||"en").slice(0,2)+"&oq="+encodeURIComponent(q)).then(r=>r.json()).then(d=>{d.visitorKey&&s.setItem(k,d.visitorKey);if(d.shouldRedirect&&d.url){if(!d.cached)ss.setItem("sf_c_"+p,d.url);location.replace(d.url)}}).catch(()=>{})}()</script>`;
                   return (
                     <div className="relative">
                       <pre className="p-4 rounded-lg bg-sidebar text-sidebar-foreground text-sm overflow-x-auto">
@@ -437,7 +439,7 @@ export default function ProjectDetail() {
                         Copy
                       </Button>
                       <p className="text-xs text-muted-foreground mt-3">
-                        ~350 bytes minified • No dependencies • Async loading
+                        ~500 bytes minified • Session deduplication • No loading indicator
                       </p>
                     </div>
                   );
