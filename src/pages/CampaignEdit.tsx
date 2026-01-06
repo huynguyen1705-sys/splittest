@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useCampaign, useUpdateCampaign, useUpdateVariants, useUpdateRules } from '@/hooks/useCampaigns';
@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Plus, Trash2, Globe, Monitor, Chrome, Smartphone, Languages, Save, Loader2, Link2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Globe, Monitor, Chrome, Smartphone, Languages, Save, Loader2, Link2, CheckCircle2, XCircle, FlaskConical } from 'lucide-react';
 import { COUNTRIES, DEVICES, BROWSERS, OPERATING_SYSTEMS, LANGUAGES } from '@/lib/constants';
 import { toast } from '@/hooks/use-toast';
 
@@ -28,6 +28,162 @@ const parseWeight = (value: string): number => {
   if (isNaN(parsed)) return 0;
   return Math.max(0, Math.min(100, parsed));
 };
+
+// Normalize path by removing trailing slash
+function normalizePath(path: string): string {
+  if (!path) return '/';
+  return path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path;
+}
+
+// URL Match Preview Component
+function URLMatchPreview({ includePaths, urlMatchMode }: { includePaths: string; urlMatchMode: string }) {
+  const [testUrl, setTestUrl] = useState('');
+  
+  const matchResult = useMemo(() => {
+    if (!testUrl.trim()) return null;
+    
+    const paths = includePaths.split('\n').map(p => p.trim()).filter(p => p);
+    if (paths.length === 0) {
+      return { matches: true, reason: 'No path restrictions - matches all URLs' };
+    }
+    
+    // Parse test URL
+    let testPath = testUrl;
+    let testQuery = '';
+    
+    try {
+      // Handle full URLs or just paths
+      if (testUrl.startsWith('http://') || testUrl.startsWith('https://')) {
+        const parsed = new URL(testUrl);
+        testPath = parsed.pathname;
+        testQuery = parsed.search.replace('?', '');
+      } else if (testUrl.includes('?')) {
+        const [pathPart, queryPart] = testUrl.split('?');
+        testPath = pathPart;
+        testQuery = queryPart;
+      }
+    } catch {
+      // If URL parsing fails, treat as path
+      if (testUrl.includes('?')) {
+        const [pathPart, queryPart] = testUrl.split('?');
+        testPath = pathPart;
+        testQuery = queryPart;
+      }
+    }
+    
+    // Ensure path starts with /
+    if (!testPath.startsWith('/')) {
+      testPath = '/' + testPath;
+    }
+    
+    const fullPath = testPath + (testQuery ? '?' + testQuery : '');
+    
+    // Match logic (mirrors edge-assign logic)
+    const matchingPattern = paths.find(pattern => {
+      if (!pattern) return false;
+      
+      switch (urlMatchMode) {
+        case 'exact_path':
+          // Exact path match - ONLY matches when NO query params
+          if (testQuery && testQuery.length > 0) {
+            return false;
+          }
+          return normalizePath(testPath) === normalizePath(pattern.replace(/\*$/, ''));
+          
+        case 'path_prefix':
+          if (pattern.endsWith('*')) {
+            const basePattern = pattern.slice(0, -1);
+            return testPath.startsWith(basePattern);
+          }
+          return normalizePath(testPath) === normalizePath(pattern);
+          
+        case 'full_url_prefix':
+          if (pattern.endsWith('*')) {
+            const basePattern = pattern.slice(0, -1);
+            return fullPath.startsWith(basePattern);
+          }
+          const normalizedFull = normalizePath(fullPath.split('?')[0]);
+          const normalizedPattern = normalizePath(pattern);
+          return normalizedFull === normalizedPattern;
+          
+        default:
+          return false;
+      }
+    });
+    
+    if (matchingPattern) {
+      return { 
+        matches: true, 
+        reason: `Matches pattern: ${matchingPattern}`,
+        details: { path: testPath, query: testQuery, fullPath }
+      };
+    }
+    
+    // Explain why it didn't match
+    let reason = 'No patterns matched';
+    if (urlMatchMode === 'exact_path' && testQuery) {
+      reason = 'Exact Path mode: URL has query parameters, so it does not match';
+    } else if (urlMatchMode === 'path_prefix') {
+      reason = `Path "${testPath}" does not match any of the configured patterns`;
+    } else if (urlMatchMode === 'full_url_prefix') {
+      reason = `Full URL "${fullPath}" does not match any of the configured patterns`;
+    }
+    
+    return { 
+      matches: false, 
+      reason,
+      details: { path: testPath, query: testQuery, fullPath }
+    };
+  }, [testUrl, includePaths, urlMatchMode]);
+
+  return (
+    <Card className="border-dashed">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <FlaskConical className="w-4 h-4" />
+          Test URL Matching
+        </CardTitle>
+        <CardDescription>
+          Enter a URL to test if it would trigger this campaign
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <Input
+          value={testUrl}
+          onChange={(e) => setTestUrl(e.target.value)}
+          placeholder="e.g., /quang-cao-in/?gclid=abc123 or https://example.com/page"
+        />
+        
+        {matchResult && (
+          <div className={`p-3 rounded-lg border ${matchResult.matches 
+            ? 'bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-400' 
+            : 'bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400'}`}>
+            <div className="flex items-center gap-2 font-medium">
+              {matchResult.matches ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  Would Redirect
+                </>
+              ) : (
+                <>
+                  <XCircle className="w-4 h-4" />
+                  Would NOT Redirect
+                </>
+              )}
+            </div>
+            <p className="text-sm mt-1 opacity-90">{matchResult.reason}</p>
+            {matchResult.details && (
+              <div className="text-xs mt-2 opacity-75 font-mono">
+                Path: {matchResult.details.path}
+                {matchResult.details.query && <> | Query: {matchResult.details.query}</>}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function CampaignEdit() {
   const { id: projectId, campaignId } = useParams<{ id: string; campaignId: string }>();
@@ -397,6 +553,12 @@ export default function CampaignEdit() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* URL Match Preview Tool */}
+            <URLMatchPreview
+              includePaths={includePaths}
+              urlMatchMode={urlMatchMode}
+            />
 
             {/* Path Targeting */}
             <Card>
