@@ -48,7 +48,13 @@ function selectVariant(variants: Array<{ id: string; weight: number }>): string 
   return variants[0].id;
 }
 
-// Check if targeting rules match - now includes path matching
+// Normalize path by removing trailing slash
+function normalizePath(path: string): string {
+  if (!path) return '/';
+  return path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path;
+}
+
+// Check if targeting rules match - now includes path matching with url_match_mode
 function matchesRules(
   rules: { 
     country_in: string[]; 
@@ -57,6 +63,7 @@ function matchesRules(
     os_in: string[]; 
     lang_in: string[];
     include_paths: string[];
+    url_match_mode?: string;
   },
   context: { 
     country: string; 
@@ -65,6 +72,7 @@ function matchesRules(
     os: string; 
     lang: string;
     path: string;
+    query: string;
   }
 ): boolean {
   // Check country targeting
@@ -82,25 +90,65 @@ function matchesRules(
   // Check language targeting
   if (rules.lang_in && rules.lang_in.length > 0 && !rules.lang_in.includes(context.lang)) return false;
   
-  // Check path targeting with wildcard support
+  // Check path targeting with url_match_mode support
   if (rules.include_paths && rules.include_paths.length > 0) {
+    const matchMode = rules.url_match_mode || 'path_prefix';
+    
+    // Combine path and query for full URL matching
+    const fullPath = context.path + (context.query ? '?' + context.query : '');
+    
+    console.log(`URL Match Mode: ${matchMode}, Path: ${context.path}, Query: ${context.query}, FullPath: ${fullPath}`);
+    
     const pathMatches = rules.include_paths.some(pattern => {
       if (!pattern) return false;
       
-      // Wildcard pattern: /blog/* matches /blog/anything
-      if (pattern.endsWith('*')) {
-        const basePattern = pattern.slice(0, -1); // Remove trailing *
-        return context.path.startsWith(basePattern);
+      switch (matchMode) {
+        case 'exact_path':
+          // Exact path match - ignore query params, no wildcard support
+          // /quang-cao-in/ matches only /quang-cao-in/ or /quang-cao-in
+          const normalizedPath = normalizePath(context.path);
+          const normalizedPattern = normalizePath(pattern.replace(/\*$/, '')); // Remove trailing * if present
+          const exactMatch = normalizedPath === normalizedPattern;
+          console.log(`exact_path: "${normalizedPath}" === "${normalizedPattern}" = ${exactMatch}`);
+          return exactMatch;
+          
+        case 'path_prefix':
+          // Path prefix match with wildcard support - ignores query params
+          // /quang-cao-in/* matches /quang-cao-in/page1 but NOT /quang-cao-in/?utm=x
+          if (pattern.endsWith('*')) {
+            const basePattern = pattern.slice(0, -1); // Remove trailing *
+            const prefixMatch = context.path.startsWith(basePattern);
+            console.log(`path_prefix (wildcard): "${context.path}".startsWith("${basePattern}") = ${prefixMatch}`);
+            return prefixMatch;
+          }
+          // Exact path match if no wildcard
+          const pathPrefixNorm = normalizePath(context.path);
+          const patternPrefixNorm = normalizePath(pattern);
+          const pathPrefixMatch = pathPrefixNorm === patternPrefixNorm;
+          console.log(`path_prefix (exact): "${pathPrefixNorm}" === "${patternPrefixNorm}" = ${pathPrefixMatch}`);
+          return pathPrefixMatch;
+          
+        case 'full_url_prefix':
+          // Full URL prefix match - includes query params
+          // /quang-cao-in/* matches /quang-cao-in/?gclid=abc
+          if (pattern.endsWith('*')) {
+            const basePattern = pattern.slice(0, -1); // Remove trailing *
+            const fullUrlMatch = fullPath.startsWith(basePattern);
+            console.log(`full_url_prefix (wildcard): "${fullPath}".startsWith("${basePattern}") = ${fullUrlMatch}`);
+            return fullUrlMatch;
+          }
+          // Exact full URL match if no wildcard
+          const fullUrlExactMatch = fullPath === pattern || fullPath.startsWith(pattern + '?');
+          console.log(`full_url_prefix (exact): "${fullPath}" matches "${pattern}" = ${fullUrlExactMatch}`);
+          return fullUrlExactMatch;
+          
+        default:
+          return false;
       }
-      
-      // Exact match (with or without trailing slash)
-      const normalizedPath = context.path.endsWith('/') ? context.path.slice(0, -1) : context.path;
-      const normalizedPattern = pattern.endsWith('/') ? pattern.slice(0, -1) : pattern;
-      return normalizedPath === normalizedPattern;
     });
     
     if (!pathMatches) {
-      console.log(`Path ${context.path} did not match any patterns: ${JSON.stringify(rules.include_paths)}`);
+      console.log(`Path ${context.path} did not match any patterns with mode ${matchMode}: ${JSON.stringify(rules.include_paths)}`);
       return false;
     }
   }
@@ -259,17 +307,17 @@ Deno.serve(async (req) => {
       country = await getCountryFromIP(clientIP);
     }
     
-    // Context now includes path for path-based matching
-    const context = { country, device, browser, os, lang, path };
+    // Context now includes path and query for URL matching
+    const context = { country, device, browser, os, lang, path, query: originalQuery };
     console.log('Visitor context:', JSON.stringify(context));
 
-    // Get active campaigns for this project with include_paths in rules
+    // Get active campaigns for this project with include_paths and url_match_mode in rules
     const { data: campaigns } = await supabase
       .from('campaigns')
       .select(`
         id, sticky_enabled, respect_dnt,
         variants (id, destination_url, weight, is_control),
-        campaign_rules (country_in, device_in, browser_in, os_in, lang_in, include_paths)
+        campaign_rules (country_in, device_in, browser_in, os_in, lang_in, include_paths, url_match_mode)
       `)
       .eq('project_id', project.id)
       .eq('status', 'active')

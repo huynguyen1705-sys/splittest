@@ -191,6 +191,7 @@ export type Database = {
           include_paths: string[] | null
           lang_in: string[] | null
           os_in: string[] | null
+          url_match_mode: string | null
         }
         Insert: {
           browser_in?: string[] | null
@@ -202,6 +203,7 @@ export type Database = {
           include_paths?: string[] | null
           lang_in?: string[] | null
           os_in?: string[] | null
+          url_match_mode?: string | null
         }
         Update: {
           browser_in?: string[] | null
@@ -213,6 +215,7 @@ export type Database = {
           include_paths?: string[] | null
           lang_in?: string[] | null
           os_in?: string[] | null
+          url_match_mode?: string | null
         }
         Relationships: [
           {

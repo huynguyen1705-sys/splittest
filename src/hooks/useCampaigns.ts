@@ -68,6 +68,7 @@ export function useCreateCampaign() {
         os_in?: string[];
         lang_in?: string[];
         include_paths?: string[];
+        url_match_mode?: string;
       };
     }) => {
       // Create campaign
@@ -116,6 +117,7 @@ export function useCreateCampaign() {
             os_in: data.rules.os_in || [],
             lang_in: data.rules.lang_in || [],
             include_paths: data.rules.include_paths || [],
+            url_match_mode: data.rules.url_match_mode || 'path_prefix',
           });
 
         if (rulesError) throw rulesError;
@@ -253,6 +255,7 @@ export function useDuplicateCampaign() {
             os_in: rules.os_in || [],
             lang_in: rules.lang_in || [],
             include_paths: rules.include_paths || [],
+            url_match_mode: rules.url_match_mode || 'path_prefix',
           });
 
         if (rulesError) throw rulesError;
@@ -319,6 +322,7 @@ export function useUpdateRules() {
         os_in?: string[];
         lang_in?: string[];
         include_paths?: string[];
+        url_match_mode?: string;
       };
     }) => {
       // Delete existing rules first, then insert new ones
@@ -337,6 +341,7 @@ export function useUpdateRules() {
           os_in: rules.os_in || [],
           lang_in: rules.lang_in || [],
           include_paths: rules.include_paths || [],
+          url_match_mode: rules.url_match_mode || 'path_prefix',
         });
 
       if (error) throw error;

@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, ArrowRight, Plus, Trash2, Globe, Monitor, Chrome, Smartphone, Languages } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ArrowLeft, ArrowRight, Plus, Trash2, Globe, Monitor, Chrome, Smartphone, Languages, Link2 } from 'lucide-react';
 import { COUNTRIES, DEVICES, BROWSERS, OPERATING_SYSTEMS, LANGUAGES } from '@/lib/constants';
 import { toast } from 'sonner';
 
@@ -45,6 +46,7 @@ export default function CampaignCreate() {
   const [selectedOS, setSelectedOS] = useState<string[]>([]);
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
   const [includePaths, setIncludePaths] = useState<string>('');
+  const [urlMatchMode, setUrlMatchMode] = useState<string>('path_prefix');
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -123,6 +125,7 @@ export default function CampaignCreate() {
           os_in: selectedOS,
           lang_in: selectedLanguages,
           include_paths: includePaths.split('\n').map(p => p.trim()).filter(p => p),
+          url_match_mode: urlMatchMode,
         },
       });
       navigate(`/project/${projectId}`);
@@ -305,7 +308,43 @@ export default function CampaignCreate() {
 
         {step === 'targeting' && (
           <div className="space-y-6">
-            {/* Path Targeting - NEW */}
+            {/* URL Match Mode - NEW */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Link2 className="w-5 h-5" />
+                  URL Match Mode
+                </CardTitle>
+                <CardDescription>
+                  Choose how source URLs should be matched for this campaign
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Select value={urlMatchMode} onValueChange={setUrlMatchMode}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select match mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="exact_path">
+                      Exact Path - Only exact path match (ignores query params)
+                    </SelectItem>
+                    <SelectItem value="path_prefix">
+                      Path Prefix - Match path prefix with wildcard support
+                    </SelectItem>
+                    <SelectItem value="full_url_prefix">
+                      Full URL - Match path + query params (for tracking URLs)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="text-sm text-muted-foreground space-y-2">
+                  <p><strong>Exact Path:</strong> <code className="bg-muted px-1 rounded">/quang-cao-in/</code> matches only that exact path. URL with <code className="bg-muted px-1 rounded">?gclid=abc</code> will NOT redirect.</p>
+                  <p><strong>Path Prefix:</strong> <code className="bg-muted px-1 rounded">/quang-cao-in/*</code> matches <code className="bg-muted px-1 rounded">/quang-cao-in/page1</code> but ignores query params.</p>
+                  <p><strong>Full URL:</strong> <code className="bg-muted px-1 rounded">/quang-cao-in/*</code> matches <code className="bg-muted px-1 rounded">/quang-cao-in/?gclid=abc</code> - use for Google Ads/Facebook Ads traffic.</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Path Targeting */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
