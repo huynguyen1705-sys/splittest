@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useCampaign, useUpdateCampaign, useUpdateVariants, useUpdateRules } from '@/hooks/useCampaigns';
+import { useProject } from '@/hooks/useProjects';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,7 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Plus, Trash2, Globe, Monitor, Chrome, Smartphone, Languages, Save, Loader2, Link2, CheckCircle2, XCircle, FlaskConical } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Globe, Monitor, Chrome, Smartphone, Languages, Save, Loader2, Link2, CheckCircle2, XCircle, FlaskConical, Camera, ExternalLink, ArrowRight } from 'lucide-react';
 import { COUNTRIES, DEVICES, BROWSERS, OPERATING_SYSTEMS, LANGUAGES } from '@/lib/constants';
 import { toast } from '@/hooks/use-toast';
 
@@ -35,9 +36,23 @@ function normalizePath(path: string): string {
   return path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path;
 }
 
-// URL Match Preview Component
-function URLMatchPreview({ includePaths, urlMatchMode }: { includePaths: string; urlMatchMode: string }) {
+// URL Match Preview Component with Screenshot
+function URLMatchPreview({ 
+  includePaths, 
+  urlMatchMode,
+  variants,
+  primaryDomain 
+}: { 
+  includePaths: string; 
+  urlMatchMode: string;
+  variants: VariantInput[];
+  primaryDomain: string;
+}) {
   const [testUrl, setTestUrl] = useState('');
+  const [showScreenshots, setShowScreenshots] = useState(false);
+  const [sourceScreenshot, setSourceScreenshot] = useState<string | null>(null);
+  const [destScreenshot, setDestScreenshot] = useState<string | null>(null);
+  const [loadingScreenshots, setLoadingScreenshots] = useState(false);
   
   const matchResult = useMemo(() => {
     if (!testUrl.trim()) return null;
@@ -136,6 +151,64 @@ function URLMatchPreview({ includePaths, urlMatchMode }: { includePaths: string;
     };
   }, [testUrl, includePaths, urlMatchMode]);
 
+  // Build full source URL
+  const getFullSourceUrl = () => {
+    if (testUrl.startsWith('http://') || testUrl.startsWith('https://')) {
+      return testUrl;
+    }
+    const domain = primaryDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const path = testUrl.startsWith('/') ? testUrl : '/' + testUrl;
+    return `https://${domain}${path}`;
+  };
+
+  // Get destination URL (first variant with weight > 0)
+  const getDestinationUrl = () => {
+    const activeVariant = variants.find(v => v.weight > 0 && v.destination_url);
+    return activeVariant?.destination_url || '';
+  };
+
+  const fetchScreenshots = async () => {
+    const sourceUrl = getFullSourceUrl();
+    const destUrl = getDestinationUrl();
+    
+    if (!sourceUrl) {
+      toast({ title: 'Error', description: 'Please enter a test URL', variant: 'destructive' });
+      return;
+    }
+
+    setLoadingScreenshots(true);
+    setShowScreenshots(true);
+    setSourceScreenshot(null);
+    setDestScreenshot(null);
+
+    try {
+      // Fetch screenshots in parallel using Microlink API
+      const [sourceRes, destRes] = await Promise.all([
+        fetch(`https://api.microlink.io/?url=${encodeURIComponent(sourceUrl)}&screenshot=true&meta=false&embed=screenshot.url`)
+          .then(r => r.json())
+          .catch(() => null),
+        destUrl 
+          ? fetch(`https://api.microlink.io/?url=${encodeURIComponent(destUrl)}&screenshot=true&meta=false&embed=screenshot.url`)
+              .then(r => r.json())
+              .catch(() => null)
+          : Promise.resolve(null)
+      ]);
+
+      if (sourceRes?.status === 'success' && sourceRes?.data?.screenshot?.url) {
+        setSourceScreenshot(sourceRes.data.screenshot.url);
+      }
+      
+      if (destRes?.status === 'success' && destRes?.data?.screenshot?.url) {
+        setDestScreenshot(destRes.data.screenshot.url);
+      }
+    } catch (error) {
+      console.error('Screenshot error:', error);
+      toast({ title: 'Error', description: 'Failed to fetch screenshots', variant: 'destructive' });
+    } finally {
+      setLoadingScreenshots(false);
+    }
+  };
+
   return (
     <Card className="border-dashed">
       <CardHeader className="pb-3">
@@ -147,12 +220,28 @@ function URLMatchPreview({ includePaths, urlMatchMode }: { includePaths: string;
           Enter a URL to test if it would trigger this campaign
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
-        <Input
-          value={testUrl}
-          onChange={(e) => setTestUrl(e.target.value)}
-          placeholder="e.g., /quang-cao-in/?gclid=abc123 or https://example.com/page"
-        />
+      <CardContent className="space-y-4">
+        <div className="flex gap-2">
+          <Input
+            value={testUrl}
+            onChange={(e) => setTestUrl(e.target.value)}
+            placeholder="e.g., /quang-cao-in/?gclid=abc123"
+            className="flex-1"
+          />
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={fetchScreenshots}
+            disabled={!testUrl.trim() || loadingScreenshots}
+          >
+            {loadingScreenshots ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Camera className="w-4 h-4" />
+            )}
+            <span className="ml-2 hidden sm:inline">Screenshot</span>
+          </Button>
+        </div>
         
         {matchResult && (
           <div className={`p-3 rounded-lg border ${matchResult.matches 
@@ -180,6 +269,91 @@ function URLMatchPreview({ includePaths, urlMatchMode }: { includePaths: string;
             )}
           </div>
         )}
+
+        {/* Screenshot Previews */}
+        {showScreenshots && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            {/* Source URL Screenshot */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Globe className="w-4 h-4 text-muted-foreground" />
+                Source URL
+              </div>
+              <p className="text-xs text-muted-foreground truncate">{getFullSourceUrl()}</p>
+              <div className="relative aspect-video bg-muted rounded-lg overflow-hidden border">
+                {loadingScreenshots ? (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : sourceScreenshot ? (
+                  <img 
+                    src={sourceScreenshot} 
+                    alt="Source URL screenshot" 
+                    className="w-full h-full object-cover object-top"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
+                    <XCircle className="w-5 h-5 mr-2" />
+                    Failed to load
+                  </div>
+                )}
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="w-full"
+                onClick={() => window.open(getFullSourceUrl(), '_blank')}
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Open in new tab
+              </Button>
+            </div>
+
+            {/* Destination URL Screenshot */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <ArrowRight className="w-4 h-4 text-green-500" />
+                Destination URL
+              </div>
+              <p className="text-xs text-muted-foreground truncate">{getDestinationUrl() || 'No destination configured'}</p>
+              <div className="relative aspect-video bg-muted rounded-lg overflow-hidden border">
+                {loadingScreenshots ? (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : destScreenshot ? (
+                  <img 
+                    src={destScreenshot} 
+                    alt="Destination URL screenshot" 
+                    className="w-full h-full object-cover object-top"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
+                    {getDestinationUrl() ? (
+                      <>
+                        <XCircle className="w-5 h-5 mr-2" />
+                        Failed to load
+                      </>
+                    ) : (
+                      'No destination'
+                    )}
+                  </div>
+                )}
+              </div>
+              {getDestinationUrl() && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="w-full"
+                  onClick={() => window.open(getDestinationUrl(), '_blank')}
+                >
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Open in new tab
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -189,6 +363,7 @@ export default function CampaignEdit() {
   const { id: projectId, campaignId } = useParams<{ id: string; campaignId: string }>();
   const { user, loading: authLoading } = useAuth();
   const { data: campaign, isLoading } = useCampaign(campaignId);
+  const { data: project } = useProject(projectId);
   const updateCampaign = useUpdateCampaign();
   const updateVariants = useUpdateVariants();
   const updateRules = useUpdateRules();
@@ -558,6 +733,8 @@ export default function CampaignEdit() {
             <URLMatchPreview
               includePaths={includePaths}
               urlMatchMode={urlMatchMode}
+              variants={variants}
+              primaryDomain={project?.primary_domain || ''}
             />
 
             {/* Path Targeting */}
