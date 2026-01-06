@@ -3,26 +3,46 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { AnalyticsData } from '@/types/database';
 
-export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '24h' | '7d' = '24h') {
+export type TimeRangePreset = '1h' | '24h' | '7d' | '30d' | 'custom';
+
+export interface DateRange {
+  from: Date;
+  to: Date;
+}
+
+export function useAnalytics(
+  campaignId: string | undefined, 
+  timeRange: TimeRangePreset = '24h',
+  customRange?: DateRange
+) {
   const queryClient = useQueryClient();
   
   return useQuery({
-    queryKey: ['analytics', campaignId, timeRange],
+    queryKey: ['analytics', campaignId, timeRange, customRange?.from?.toISOString(), customRange?.to?.toISOString()],
     queryFn: async (): Promise<AnalyticsData> => {
       if (!campaignId) throw new Error('Campaign ID required');
 
       const now = new Date();
       let startTime: Date;
+      let endTime: Date = now;
       
-      switch (timeRange) {
-        case '1h':
-          startTime = new Date(now.getTime() - 60 * 60 * 1000);
-          break;
-        case '7d':
-          startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-        default:
-          startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      if (timeRange === 'custom' && customRange) {
+        startTime = customRange.from;
+        endTime = customRange.to;
+      } else {
+        switch (timeRange) {
+          case '1h':
+            startTime = new Date(now.getTime() - 60 * 60 * 1000);
+            break;
+          case '7d':
+            startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            break;
+          case '30d':
+            startTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            break;
+          default:
+            startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        }
       }
 
       // Try aggregates_minute first for efficiency
