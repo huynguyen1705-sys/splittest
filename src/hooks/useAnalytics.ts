@@ -46,6 +46,9 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
         totalRedirectsOk: 0,
         totalRedirectsFail: 0,
         avgTimeToRedirect: 0,
+        uniqueVisitors: 0,
+        uniqueSessions: 0,
+        redirectSuccessRate: 0,
         byVariant: {},
         byCountry: {},
         byDevice: {},
@@ -57,8 +60,12 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
 
       let totalTTR = 0;
       let ttrCount = 0;
-      const timeSeriesMap = new Map<string, { assigns: number; redirectsOk: number }>();
+      const timeSeriesMap = new Map<string, { assigns: number; redirectsOk: number; uniqueVisitors: number }>();
       const processedMinutes = new Set<string>();
+      
+      // Track unique visitors and sessions across all data
+      const allVisitorHashes = new Set<string>();
+      const allSessionIds = new Set<string>();
 
       // Process aggregates (exclude last 5 minutes to avoid double counting)
       (aggregates || []).forEach((agg) => {
@@ -74,6 +81,10 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
         analytics.totalAssigns += agg.assigns || 0;
         analytics.totalRedirectsOk += agg.redirects_ok || 0;
         analytics.totalRedirectsFail += agg.redirects_fail || 0;
+        
+        // Sum unique metrics from aggregates
+        analytics.uniqueVisitors += agg.unique_visitors || 0;
+        analytics.uniqueSessions += agg.unique_sessions || 0;
 
         // Track TTR for weighted average
         if (agg.avg_ttr_ms && agg.redirects_ok) {
@@ -84,11 +95,12 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
         // By variant
         if (agg.variant_id) {
           if (!analytics.byVariant[agg.variant_id]) {
-            analytics.byVariant[agg.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0 };
+            analytics.byVariant[agg.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0, uniqueVisitors: 0 };
           }
           analytics.byVariant[agg.variant_id].assigns += agg.assigns || 0;
           analytics.byVariant[agg.variant_id].redirectsOk += agg.redirects_ok || 0;
           analytics.byVariant[agg.variant_id].redirectsFail += agg.redirects_fail || 0;
+          analytics.byVariant[agg.variant_id].uniqueVisitors += agg.unique_visitors || 0;
         }
 
         // By dimensions (counting assigns)
@@ -115,21 +127,30 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
           : agg.minute_ts.slice(0, 13);
         
         if (!timeSeriesMap.has(tsKey)) {
-          timeSeriesMap.set(tsKey, { assigns: 0, redirectsOk: 0 });
+          timeSeriesMap.set(tsKey, { assigns: 0, redirectsOk: 0, uniqueVisitors: 0 });
         }
         const ts = timeSeriesMap.get(tsKey)!;
         ts.assigns += agg.assigns || 0;
         ts.redirectsOk += agg.redirects_ok || 0;
+        ts.uniqueVisitors += agg.unique_visitors || 0;
       });
 
       // Process recent raw events (for real-time display)
       (recentEvents || []).forEach((event) => {
+        // Track unique visitors/sessions from recent events
+        if (event.visitor_key_hash) {
+          allVisitorHashes.add(event.visitor_key_hash);
+        }
+        if (event.session_id) {
+          allSessionIds.add(event.session_id);
+        }
+
         switch (event.event_type) {
           case 'assign':
             analytics.totalAssigns += 1;
             if (event.variant_id) {
               if (!analytics.byVariant[event.variant_id]) {
-                analytics.byVariant[event.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0 };
+                analytics.byVariant[event.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0, uniqueVisitors: 0 };
               }
               analytics.byVariant[event.variant_id].assigns += 1;
             }
@@ -143,7 +164,7 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
             analytics.totalRedirectsOk += 1;
             if (event.variant_id) {
               if (!analytics.byVariant[event.variant_id]) {
-                analytics.byVariant[event.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0 };
+                analytics.byVariant[event.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0, uniqueVisitors: 0 };
               }
               analytics.byVariant[event.variant_id].redirectsOk += 1;
             }
@@ -156,7 +177,7 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
             analytics.totalRedirectsFail += 1;
             if (event.variant_id) {
               if (!analytics.byVariant[event.variant_id]) {
-                analytics.byVariant[event.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0 };
+                analytics.byVariant[event.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0, uniqueVisitors: 0 };
               }
               analytics.byVariant[event.variant_id].redirectsFail += 1;
             }
@@ -169,12 +190,22 @@ export function useAnalytics(campaignId: string | undefined, timeRange: '1h' | '
           : event.ts.slice(0, 13);
         
         if (!timeSeriesMap.has(tsKey)) {
-          timeSeriesMap.set(tsKey, { assigns: 0, redirectsOk: 0 });
+          timeSeriesMap.set(tsKey, { assigns: 0, redirectsOk: 0, uniqueVisitors: 0 });
         }
         const ts = timeSeriesMap.get(tsKey)!;
         if (event.event_type === 'assign') ts.assigns += 1;
         if (event.event_type === 'redirect_ok') ts.redirectsOk += 1;
       });
+
+      // Add recent unique visitors/sessions to totals
+      analytics.uniqueVisitors += allVisitorHashes.size;
+      analytics.uniqueSessions += allSessionIds.size;
+
+      // Calculate redirect success rate
+      const totalRedirects = analytics.totalRedirectsOk + analytics.totalRedirectsFail;
+      analytics.redirectSuccessRate = totalRedirects > 0 
+        ? Math.round((analytics.totalRedirectsOk / totalRedirects) * 100) 
+        : 0;
 
       analytics.avgTimeToRedirect = ttrCount > 0 ? Math.round(totalTTR / ttrCount) : 0;
       analytics.timeSeries = Array.from(timeSeriesMap.entries())
@@ -197,6 +228,7 @@ export function useRealtimeEvents(campaignId: string | undefined) {
     device: string | null;
     browser: string | null;
     variant_id: string | null;
+    session_id: string | null;
   }>>([]);
   const [newEventCount, setNewEventCount] = useState(0);
   const [lastEventTime, setLastEventTime] = useState<Date | null>(null);
@@ -220,7 +252,7 @@ export function useRealtimeEvents(campaignId: string | undefined) {
       const since = new Date(Date.now() - windowMs).toISOString();
       const { data } = await supabase
         .from('events_raw')
-        .select('id, event_type, ts, country, device, browser, variant_id')
+        .select('id, event_type, ts, country, device, browser, variant_id, session_id')
         .eq('campaign_id', campaignId)
         .gte('ts', since)
         .order('ts', { ascending: false })

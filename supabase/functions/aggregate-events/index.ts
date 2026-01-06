@@ -62,6 +62,8 @@ Deno.serve(async (req) => {
       redirects_fail: number;
       total_ttr_ms: number;
       ttr_count: number;
+      unique_visitor_hashes: Set<string>;
+      unique_session_ids: Set<string>;
     }>();
 
     for (const event of events) {
@@ -92,10 +94,20 @@ Deno.serve(async (req) => {
           redirects_fail: 0,
           total_ttr_ms: 0,
           ttr_count: 0,
+          unique_visitor_hashes: new Set(),
+          unique_session_ids: new Set(),
         });
       }
 
       const agg = aggregates.get(key)!;
+
+      // Track unique visitors and sessions
+      if (event.visitor_key_hash) {
+        agg.unique_visitor_hashes.add(event.visitor_key_hash);
+      }
+      if (event.session_id) {
+        agg.unique_session_ids.add(event.session_id);
+      }
 
       switch (event.event_type) {
         case 'assign':
@@ -131,6 +143,8 @@ Deno.serve(async (req) => {
         redirects_ok: agg.redirects_ok,
         redirects_fail: agg.redirects_fail,
         avg_ttr_ms: agg.ttr_count > 0 ? Math.round(agg.total_ttr_ms / agg.ttr_count) : null,
+        unique_visitors: agg.unique_visitor_hashes.size,
+        unique_sessions: agg.unique_session_ids.size,
       }));
 
     if (aggregateRows.length > 0) {
@@ -146,7 +160,7 @@ Deno.serve(async (req) => {
         throw insertError;
       }
 
-      console.log(`Inserted ${aggregateRows.length} aggregate rows`);
+      console.log(`Inserted ${aggregateRows.length} aggregate rows with unique metrics`);
     }
 
     return new Response(JSON.stringify({

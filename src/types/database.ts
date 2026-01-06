@@ -76,6 +76,29 @@ export interface Assignment {
   assigned_at: string;
 }
 
+export interface Session {
+  id: string;
+  project_id: string;
+  visitor_key_hash: string;
+  session_key: string;
+  started_at: string;
+  last_activity_at: string;
+  page_views: number;
+  entry_page: string | null;
+  exit_page: string | null;
+  country: string | null;
+  device: string | null;
+  browser: string | null;
+  os: string | null;
+  referrer: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  gclid: string | null;
+  fbclid: string | null;
+  is_bounced: boolean;
+}
+
 export interface EventRaw {
   id: string;
   project_id: string;
@@ -91,6 +114,7 @@ export interface EventRaw {
   time_to_redirect_ms: number | null;
   error_message: string | null;
   visitor_key_hash: string | null;
+  session_id: string | null;
   ip_hash: string | null;
   user_agent: string | null;
   path: string | null;
@@ -113,6 +137,8 @@ export interface AggregateMinute {
   browser: string | null;
   os: string | null;
   lang: string | null;
+  unique_visitors: number;
+  unique_sessions: number;
 }
 
 export interface CampaignWithDetails extends Campaign {
@@ -126,11 +152,20 @@ export interface AnalyticsData {
   totalRedirectsOk: number;
   totalRedirectsFail: number;
   avgTimeToRedirect: number;
-  byVariant: Record<string, { assigns: number; redirectsOk: number; redirectsFail: number }>;
+  // NEW: Unique metrics
+  uniqueVisitors: number;
+  uniqueSessions: number;
+  redirectSuccessRate: number;
+  byVariant: Record<string, { 
+    assigns: number; 
+    redirectsOk: number; 
+    redirectsFail: number;
+    uniqueVisitors: number;
+  }>;
   byCountry: Record<string, number>;
   byDevice: Record<string, number>;
   byBrowser: Record<string, number>;
   byOS: Record<string, number>;
   byLang: Record<string, number>;
-  timeSeries: { ts: string; assigns: number; redirectsOk: number }[];
+  timeSeries: { ts: string; assigns: number; redirectsOk: number; uniqueVisitors?: number }[];
 }

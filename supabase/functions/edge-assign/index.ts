@@ -48,16 +48,63 @@ function selectVariant(variants: Array<{ id: string; weight: number }>): string 
   return variants[0].id;
 }
 
-// Check if targeting rules match
+// Check if targeting rules match - now includes path matching
 function matchesRules(
-  rules: { country_in: string[]; device_in: string[]; browser_in: string[]; os_in: string[]; lang_in: string[] },
-  context: { country: string; device: string; browser: string; os: string; lang: string }
+  rules: { 
+    country_in: string[]; 
+    device_in: string[]; 
+    browser_in: string[]; 
+    os_in: string[]; 
+    lang_in: string[];
+    include_paths: string[];
+  },
+  context: { 
+    country: string; 
+    device: string; 
+    browser: string; 
+    os: string; 
+    lang: string;
+    path: string;
+  }
 ): boolean {
-  if (rules.country_in.length > 0 && !rules.country_in.includes(context.country)) return false;
-  if (rules.device_in.length > 0 && !rules.device_in.includes(context.device)) return false;
-  if (rules.browser_in.length > 0 && !rules.browser_in.includes(context.browser)) return false;
-  if (rules.os_in.length > 0 && !rules.os_in.includes(context.os)) return false;
-  if (rules.lang_in.length > 0 && !rules.lang_in.includes(context.lang)) return false;
+  // Check country targeting
+  if (rules.country_in && rules.country_in.length > 0 && !rules.country_in.includes(context.country)) return false;
+  
+  // Check device targeting
+  if (rules.device_in && rules.device_in.length > 0 && !rules.device_in.includes(context.device)) return false;
+  
+  // Check browser targeting
+  if (rules.browser_in && rules.browser_in.length > 0 && !rules.browser_in.includes(context.browser)) return false;
+  
+  // Check OS targeting
+  if (rules.os_in && rules.os_in.length > 0 && !rules.os_in.includes(context.os)) return false;
+  
+  // Check language targeting
+  if (rules.lang_in && rules.lang_in.length > 0 && !rules.lang_in.includes(context.lang)) return false;
+  
+  // Check path targeting with wildcard support
+  if (rules.include_paths && rules.include_paths.length > 0) {
+    const pathMatches = rules.include_paths.some(pattern => {
+      if (!pattern) return false;
+      
+      // Wildcard pattern: /blog/* matches /blog/anything
+      if (pattern.endsWith('*')) {
+        const basePattern = pattern.slice(0, -1); // Remove trailing *
+        return context.path.startsWith(basePattern);
+      }
+      
+      // Exact match (with or without trailing slash)
+      const normalizedPath = context.path.endsWith('/') ? context.path.slice(0, -1) : context.path;
+      const normalizedPattern = pattern.endsWith('/') ? pattern.slice(0, -1) : pattern;
+      return normalizedPath === normalizedPattern;
+    });
+    
+    if (!pathMatches) {
+      console.log(`Path ${context.path} did not match any patterns: ${JSON.stringify(rules.include_paths)}`);
+      return false;
+    }
+  }
+  
   return true;
 }
 
@@ -105,6 +152,51 @@ function getClientIP(req: Request): string {
   return '127.0.0.1';
 }
 
+// Generate session ID based on visitor key and 30-minute window
+async function generateSessionId(visitorKeyHash: string): Promise<string> {
+  const sessionWindow = 30 * 60 * 1000; // 30 minutes in milliseconds
+  const windowKey = Math.floor(Date.now() / sessionWindow).toString();
+  return await hashString(visitorKeyHash + windowKey);
+}
+
+// Build final URL with path wildcard and query parameter handling
+function buildFinalUrl(destinationUrl: string, path: string, originalQuery: string): string {
+  let finalUrl = destinationUrl;
+  
+  if (!finalUrl) return '';
+  
+  try {
+    // Handle path wildcard: if destination ends with /*, append visitor's path
+    if (finalUrl.includes('/*')) {
+      const baseUrl = finalUrl.replace('/*', '');
+      const destUrl = new URL(baseUrl);
+      const visitorPath = path.startsWith('/') ? path.slice(1) : path;
+      destUrl.pathname = destUrl.pathname.replace(/\/$/, '') + '/' + visitorPath;
+      finalUrl = destUrl.toString();
+      console.log(`Path wildcard applied: ${destinationUrl} + ${path} -> ${finalUrl}`);
+    }
+    
+    // Merge original query params into destination URL
+    if (originalQuery) {
+      const destUrl = new URL(finalUrl);
+      const origParams = new URLSearchParams(originalQuery);
+      
+      origParams.forEach((value, key) => {
+        // Don't override existing params in destination URL
+        if (!destUrl.searchParams.has(key)) {
+          destUrl.searchParams.set(key, value);
+        }
+      });
+      
+      finalUrl = destUrl.toString();
+    }
+  } catch (e) {
+    console.warn('Failed to process URL:', e);
+  }
+  
+  return finalUrl;
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -115,10 +207,18 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const token = url.searchParams.get('token');
     const visitorKey = url.searchParams.get('vk');
+    const sessionKey = url.searchParams.get('sk') || ''; // Session key from client
     const path = url.searchParams.get('path') || '/';
     const lang = url.searchParams.get('lang') || 'en';
     const dnt = url.searchParams.get('dnt') === '1';
-    const originalQuery = url.searchParams.get('oq') || ''; // Original query string from visitor URL
+    const originalQuery = url.searchParams.get('oq') || '';
+    
+    // UTM parameters for session tracking
+    const utmSource = url.searchParams.get('utm_source') || '';
+    const utmMedium = url.searchParams.get('utm_medium') || '';
+    const utmCampaign = url.searchParams.get('utm_campaign') || '';
+    const gclid = url.searchParams.get('gclid') || '';
+    const fbclid = url.searchParams.get('fbclid') || '';
 
     if (!token) {
       return new Response(JSON.stringify({ error: 'Missing token' }), {
@@ -149,6 +249,7 @@ Deno.serve(async (req) => {
     // Parse user context
     const userAgent = req.headers.get('user-agent') || '';
     const { device, browser, os } = parseUserAgent(userAgent);
+    const referrer = req.headers.get('referer') || '';
     
     // Get country - first try Cloudflare header, then fallback to IP geolocation
     let country = req.headers.get('cf-ipcountry');
@@ -158,16 +259,17 @@ Deno.serve(async (req) => {
       country = await getCountryFromIP(clientIP);
     }
     
-    const context = { country, device, browser, os, lang };
+    // Context now includes path for path-based matching
+    const context = { country, device, browser, os, lang, path };
     console.log('Visitor context:', JSON.stringify(context));
 
-    // Get active campaigns for this project
+    // Get active campaigns for this project with include_paths in rules
     const { data: campaigns } = await supabase
       .from('campaigns')
       .select(`
         id, sticky_enabled, respect_dnt,
         variants (id, destination_url, weight, is_control),
-        campaign_rules (country_in, device_in, browser_in, os_in, lang_in)
+        campaign_rules (country_in, device_in, browser_in, os_in, lang_in, include_paths)
       `)
       .eq('project_id', project.id)
       .eq('status', 'active')
@@ -179,17 +281,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Find matching campaign
+    // Find matching campaign with path-based rules
     let matchedCampaign = null;
     for (const campaign of campaigns) {
-      // campaign_rules can be array or single object depending on Supabase query
       const rulesData = campaign.campaign_rules;
       const rules = Array.isArray(rulesData) 
-        ? (rulesData[0] || { country_in: [], device_in: [], browser_in: [], os_in: [], lang_in: [] })
-        : (rulesData || { country_in: [], device_in: [], browser_in: [], os_in: [], lang_in: [] });
+        ? (rulesData[0] || { country_in: [], device_in: [], browser_in: [], os_in: [], lang_in: [], include_paths: [] })
+        : (rulesData || { country_in: [], device_in: [], browser_in: [], os_in: [], lang_in: [], include_paths: [] });
       
       console.log(`Campaign ${campaign.id} rules:`, JSON.stringify(rules));
-      console.log(`Checking match: country_in=${JSON.stringify(rules.country_in)}, visitor_country=${context.country}`);
+      console.log(`Checking match: country_in=${JSON.stringify(rules.country_in)}, include_paths=${JSON.stringify(rules.include_paths)}, visitor_path=${context.path}`);
       
       if (matchesRules(rules, context)) {
         console.log(`Campaign ${campaign.id} MATCHED`);
@@ -206,40 +307,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Handle DNT
+    // Handle DNT - assign variant but don't store
     if (matchedCampaign.respect_dnt && dnt) {
-      // Assign variant but don't store
       const selectedVariantId = selectVariant(matchedCampaign.variants);
       const selectedVariant = matchedCampaign.variants.find((v: { id: string }) => v.id === selectedVariantId);
-      
-      // Build final URL with path wildcard and query parameter merging for DNT case
-      let dntFinalUrl = selectedVariant?.destination_url || '';
-      if (dntFinalUrl) {
-        try {
-          // Handle path wildcard
-          if (dntFinalUrl.includes('/*')) {
-            const baseUrl = dntFinalUrl.replace('/*', '');
-            const destUrl = new URL(baseUrl);
-            const visitorPath = path.startsWith('/') ? path.slice(1) : path;
-            destUrl.pathname = destUrl.pathname.replace(/\/$/, '') + '/' + visitorPath;
-            dntFinalUrl = destUrl.toString();
-          }
-          
-          // Merge query params
-          if (originalQuery) {
-            const destUrl = new URL(dntFinalUrl);
-            const origParams = new URLSearchParams(originalQuery);
-            origParams.forEach((value, key) => {
-              if (!destUrl.searchParams.has(key)) {
-                destUrl.searchParams.set(key, value);
-              }
-            });
-            dntFinalUrl = destUrl.toString();
-          }
-        } catch (e) {
-          console.warn('Failed to process URL for DNT:', e);
-        }
-      }
+      const dntFinalUrl = buildFinalUrl(selectedVariant?.destination_url || '', path, originalQuery);
       
       return new Response(JSON.stringify({
         shouldRedirect: true,
@@ -255,6 +327,40 @@ Deno.serve(async (req) => {
     // Generate or use visitor key
     const actualVisitorKey = visitorKey || crypto.randomUUID();
     const visitorKeyHash = await hashString(actualVisitorKey);
+    
+    // Generate session ID for deduplication (30-minute window)
+    const sessionId = await generateSessionId(visitorKeyHash);
+    console.log(`Session ID generated: ${sessionId.slice(0, 16)}...`);
+
+    // === SESSION-BASED DEDUPLICATION ===
+    // Check if we already have an assign event for this session
+    const { data: existingAssign } = await supabase
+      .from('events_raw')
+      .select('variant_id')
+      .eq('campaign_id', matchedCampaign.id)
+      .eq('visitor_key_hash', visitorKeyHash)
+      .eq('session_id', sessionId)
+      .eq('event_type', 'assign')
+      .maybeSingle();
+
+    if (existingAssign) {
+      // Return cached result without logging new event
+      console.log(`Session already assigned to variant ${existingAssign.variant_id}, returning cached result`);
+      const cachedVariant = matchedCampaign.variants.find((v: { id: string }) => v.id === existingAssign.variant_id);
+      const cachedUrl = buildFinalUrl(cachedVariant?.destination_url || '', path, originalQuery);
+      
+      return new Response(JSON.stringify({
+        shouldRedirect: true,
+        url: cachedUrl,
+        campaignId: matchedCampaign.id,
+        variantId: existingAssign.variant_id,
+        visitorKey: actualVisitorKey,
+        cached: true, // Flag to tell client this is a cached response
+        ttl: 86400,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Get or create visitor
     let visitorId: string;
@@ -284,7 +390,6 @@ Deno.serve(async (req) => {
 
       if (insertError) {
         console.error('Failed to create visitor:', insertError);
-        // Continue without persistent visitor
         visitorId = crypto.randomUUID();
       } else {
         visitorId = newVisitor.id;
@@ -319,46 +424,9 @@ Deno.serve(async (req) => {
     }
 
     const selectedVariant = matchedCampaign.variants.find((v: { id: string }) => v.id === selectedVariantId);
+    const finalUrl = buildFinalUrl(selectedVariant?.destination_url || '', path, originalQuery);
 
-    // Build final URL with path wildcard and query parameter merging
-    let finalUrl = selectedVariant?.destination_url || '';
-    if (finalUrl) {
-      try {
-        // Handle path wildcard: if destination ends with /*, append visitor's path
-        if (finalUrl.includes('/*')) {
-          // Remove the /* from destination
-          const baseUrl = finalUrl.replace('/*', '');
-          const destUrl = new URL(baseUrl);
-          
-          // Append the visitor's path (remove leading slash to avoid double slashes)
-          const visitorPath = path.startsWith('/') ? path.slice(1) : path;
-          destUrl.pathname = destUrl.pathname.replace(/\/$/, '') + '/' + visitorPath;
-          
-          finalUrl = destUrl.toString();
-          console.log(`Path wildcard applied: ${selectedVariant?.destination_url} + ${path} -> ${finalUrl}`);
-        }
-        
-        // Merge original query params into destination URL
-        if (originalQuery) {
-          const destUrl = new URL(finalUrl);
-          const origParams = new URLSearchParams(originalQuery);
-          
-          origParams.forEach((value, key) => {
-            // Don't override existing params in destination URL
-            if (!destUrl.searchParams.has(key)) {
-              destUrl.searchParams.set(key, value);
-            }
-          });
-          
-          finalUrl = destUrl.toString();
-          console.log(`Final URL with merged params: ${finalUrl}`);
-        }
-      } catch (e) {
-        console.warn('Failed to process URL:', e);
-      }
-    }
-
-    // Log assignment event
+    // Log assignment event with session_id for deduplication
     await supabase.from('events_raw').insert({
       project_id: project.id,
       campaign_id: matchedCampaign.id,
@@ -370,9 +438,36 @@ Deno.serve(async (req) => {
       os,
       lang,
       visitor_key_hash: visitorKeyHash,
+      session_id: sessionId,
       path,
+      referrer: referrer.slice(0, 500),
       user_agent: userAgent.slice(0, 500),
     });
+
+    // Create or update session record
+    const fullSessionKey = sessionKey || sessionId;
+    await supabase.from('sessions').upsert({
+      project_id: project.id,
+      visitor_key_hash: visitorKeyHash,
+      session_key: fullSessionKey,
+      entry_page: path,
+      exit_page: path,
+      country,
+      device,
+      browser,
+      os,
+      referrer: referrer.slice(0, 500),
+      utm_source: utmSource || null,
+      utm_medium: utmMedium || null,
+      utm_campaign: utmCampaign || null,
+      gclid: gclid || null,
+      fbclid: fbclid || null,
+      last_activity_at: new Date().toISOString(),
+    }, {
+      onConflict: 'project_id,session_key',
+    });
+
+    console.log(`New assign logged for session ${sessionId.slice(0, 16)}..., variant ${selectedVariantId}`);
 
     return new Response(JSON.stringify({
       shouldRedirect: true,
@@ -380,6 +475,8 @@ Deno.serve(async (req) => {
       campaignId: matchedCampaign.id,
       variantId: selectedVariantId,
       visitorKey: actualVisitorKey,
+      sessionId: sessionId,
+      cached: false,
       ttl: 86400, // 24 hours
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
