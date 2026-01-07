@@ -3,6 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { BotSignals, BotReviewItem } from '@/types/database';
 import { toast } from '@/hooks/use-toast';
 
+export interface BotVsHumanTimeSeries {
+  ts: string;
+  bots: number;
+  humans: number;
+}
+
 export interface BotAnalyticsData {
   totalSessions: number;
   suspectedBotSessions: number;
@@ -12,6 +18,7 @@ export interface BotAnalyticsData {
   signalsBreakdown: { signal: string; count: number; label: string }[];
   actionsTaken: { action: string; count: number }[];
   flaggedSessions: FlaggedSession[];
+  timeSeries: BotVsHumanTimeSeries[];
 }
 
 export interface FlaggedSession {
@@ -158,6 +165,28 @@ export function useBotAnalytics(campaignId: string | undefined) {
         .filter(([, count]) => count > 0)
         .map(([action, count]) => ({ action, count }));
 
+      // Build time series for bot vs human traffic (last 7 days, hourly buckets)
+      const timeSeriesMap = new Map<string, { bots: number; humans: number }>();
+      allSessions.forEach(s => {
+        if (!s.started_at) return;
+        // Round to hour
+        const hourKey = s.started_at.slice(0, 13); // "YYYY-MM-DDTHH"
+        if (!timeSeriesMap.has(hourKey)) {
+          timeSeriesMap.set(hourKey, { bots: 0, humans: 0 });
+        }
+        const entry = timeSeriesMap.get(hourKey)!;
+        if (s.is_bot_suspected) {
+          entry.bots++;
+        } else {
+          entry.humans++;
+        }
+      });
+
+      const timeSeries: BotVsHumanTimeSeries[] = Array.from(timeSeriesMap.entries())
+        .map(([ts, data]) => ({ ts, ...data }))
+        .sort((a, b) => a.ts.localeCompare(b.ts))
+        .slice(-168); // Last 7 days (168 hours)
+
       return {
         totalSessions,
         suspectedBotSessions,
@@ -167,6 +196,7 @@ export function useBotAnalytics(campaignId: string | undefined) {
         signalsBreakdown,
         actionsTaken,
         flaggedSessions,
+        timeSeries,
       };
     },
     enabled: !!campaignId,

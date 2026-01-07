@@ -984,6 +984,64 @@ export default function CampaignAnalytics() {
                   </Card>
                 </div>
 
+                {/* Bot vs Human Traffic Over Time */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Activity className="w-5 h-5" />
+                      Bot vs Human Traffic Over Time
+                    </CardTitle>
+                    <CardDescription>
+                      Comparison of bot and legitimate traffic patterns
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {!botAnalytics?.timeSeries?.length ? (
+                      <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
+                        No time series data available
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={250}>
+                        <LineChart data={botAnalytics.timeSeries}>
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                          <XAxis 
+                            dataKey="ts" 
+                            className="text-xs"
+                            tick={{ fontSize: 10 }}
+                            tickFormatter={(v) => {
+                              const date = new Date(v);
+                              return date.toLocaleDateString([], { weekday: 'short' }) + ' ' + 
+                                     date.toLocaleTimeString([], { hour: '2-digit' });
+                            }}
+                            interval="preserveStartEnd"
+                          />
+                          <YAxis className="text-xs" tick={{ fontSize: 10 }} width={35} />
+                          <Tooltip 
+                            contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 12 }}
+                            labelFormatter={(v) => new Date(v).toLocaleString()}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="humans" 
+                            stroke="hsl(var(--success))" 
+                            strokeWidth={2} 
+                            dot={false} 
+                            name="Humans" 
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="bots" 
+                            stroke="hsl(var(--destructive))" 
+                            strokeWidth={2} 
+                            dot={false} 
+                            name="Bots" 
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
+
                 <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
                   {/* Score Distribution */}
                   <Card>
