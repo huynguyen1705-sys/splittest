@@ -55,6 +55,56 @@ export default function CampaignAnalytics() {
   const [isSendingTestEvent, setIsSendingTestEvent] = useState(false);
   const [testEventType, setTestEventType] = useState<'assign' | 'redirect_ok' | 'redirect_fail'>('assign');
 
+  // Move useMemo hooks before any early returns to ensure consistent hook order
+  const variantData = useMemo(() => {
+    if (!campaign?.variants) return [];
+    return campaign.variants.map((v, i) => ({
+      id: v.id,
+      name: v.name,
+      isControl: v.is_control,
+      assigns: analytics?.byVariant[v.id]?.assigns || 0,
+      redirectsOk: analytics?.byVariant[v.id]?.redirectsOk || 0,
+      redirectsFail: analytics?.byVariant[v.id]?.redirectsFail || 0,
+      uniqueVisitors: analytics?.byVariant[v.id]?.uniqueVisitors || 0,
+      color: COLORS[i % COLORS.length],
+    }));
+  }, [campaign?.variants, analytics?.byVariant]);
+
+  // Calculate statistical significance
+  const significanceData = useMemo(() => {
+    if (!variantData || variantData.length < 2) return null;
+
+    const controlIndex = variantData.findIndex(v => v.isControl);
+    const actualControlIndex = controlIndex >= 0 ? controlIndex : 0;
+    const control = variantData[actualControlIndex];
+
+    if (!control) return null;
+
+    const variantStats: VariantStats[] = variantData.map(v => 
+      analyticsToVariantStats(v.id, v.name, {
+        assigns: v.assigns,
+        redirectsOk: v.redirectsOk,
+        redirectsFail: v.redirectsFail,
+        uniqueVisitors: v.uniqueVisitors,
+      })
+    );
+
+    const controlStats = variantStats[actualControlIndex];
+    
+    const results = new Map<string, SignificanceResult>();
+    variantStats.forEach((variant, index) => {
+      if (index === actualControlIndex) return;
+      results.set(variant.name, calculateSignificance(controlStats, variant));
+    });
+
+    return {
+      controlStats,
+      variantStats,
+      results,
+      controlName: control.name,
+    };
+  }, [variantData]);
+
   const handleTestEvent = async () => {
     if (!campaignId || !projectId || !campaign?.variants?.length) {
       toast({ title: 'Error', description: 'No variants available', variant: 'destructive' });
@@ -142,58 +192,6 @@ export default function CampaignAnalytics() {
       </div>
     );
   }
-
-  const variantData = useMemo(() => {
-    if (!campaign?.variants) return [];
-    return campaign.variants.map((v, i) => ({
-      id: v.id,
-      name: v.name,
-      isControl: v.is_control,
-      assigns: analytics?.byVariant[v.id]?.assigns || 0,
-      redirectsOk: analytics?.byVariant[v.id]?.redirectsOk || 0,
-      redirectsFail: analytics?.byVariant[v.id]?.redirectsFail || 0,
-      uniqueVisitors: analytics?.byVariant[v.id]?.uniqueVisitors || 0,
-      color: COLORS[i % COLORS.length],
-    }));
-  }, [campaign?.variants, analytics?.byVariant]);
-
-  // Calculate statistical significance
-  const significanceData = useMemo(() => {
-    if (!variantData || variantData.length < 2) return null;
-
-    // Find control variant (first one with isControl=true, or first variant)
-    const controlIndex = variantData.findIndex(v => v.isControl);
-    const actualControlIndex = controlIndex >= 0 ? controlIndex : 0;
-    const control = variantData[actualControlIndex];
-
-    if (!control) return null;
-
-    // Convert to VariantStats format
-    const variantStats: VariantStats[] = variantData.map(v => 
-      analyticsToVariantStats(v.id, v.name, {
-        assigns: v.assigns,
-        redirectsOk: v.redirectsOk,
-        redirectsFail: v.redirectsFail,
-        uniqueVisitors: v.uniqueVisitors,
-      })
-    );
-
-    const controlStats = variantStats[actualControlIndex];
-    
-    // Calculate significance for each non-control variant
-    const results = new Map<string, SignificanceResult>();
-    variantStats.forEach((variant, index) => {
-      if (index === actualControlIndex) return;
-      results.set(variant.name, calculateSignificance(controlStats, variant));
-    });
-
-    return {
-      controlStats,
-      variantStats,
-      results,
-      controlName: control.name,
-    };
-  }, [variantData]);
 
   if (!campaign) {
     return (
