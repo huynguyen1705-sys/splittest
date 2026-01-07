@@ -65,7 +65,7 @@ export function useAnalytics(
       // Fetch sessions data for unique visitors/sessions, UTM attribution, and geo breakdown
       let sessionsQuery = supabase
         .from('sessions')
-        .select('id, utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer, visitor_key_hash, is_bot_suspected, session_key, city, region, country, isp, is_mobile, is_proxy')
+        .select('id, utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer, visitor_key_hash, is_bot_suspected, session_key, city, region, country, isp, is_mobile, is_proxy, started_at')
         .eq('campaign_id', campaignId)
         .gte('started_at', startTime.toISOString())
         .lte('started_at', endTime.toISOString());
@@ -101,6 +101,8 @@ export function useAnalytics(
         byISP: [],
         networkType: { mobile: 0, fixed: 0 },
         proxyUsage: { proxy: 0, direct: 0 },
+        // Time of day
+        byHour: {},
       };
 
       // Track unique visitors and sessions directly from sessions table (most accurate)
@@ -117,6 +119,7 @@ export function useAnalytics(
       const cityMap: Record<string, { sessions: number; visitors: Set<string>; country: string }> = {};
       const regionMap: Record<string, { sessions: number; visitors: Set<string>; country: string }> = {};
       const ispMap: Record<string, { sessions: number; isMobile: boolean }> = {};
+      const hourMap: Record<number, number> = {}; // hour -> count
       let mobileCount = 0;
       let fixedCount = 0;
       let proxyCount = 0;
@@ -169,6 +172,12 @@ export function useAnalytics(
           proxyCount++;
         } else {
           directCount++;
+        }
+
+        // Time of day analysis
+        if (session.started_at) {
+          const hour = new Date(session.started_at).getHours();
+          hourMap[hour] = (hourMap[hour] || 0) + 1;
         }
         
         // Determine UTM source
@@ -261,6 +270,7 @@ export function useAnalytics(
 
       analytics.networkType = { mobile: mobileCount, fixed: fixedCount };
       analytics.proxyUsage = { proxy: proxyCount, direct: directCount };
+      analytics.byHour = hourMap;
 
       let totalTTR = 0;
       let ttrCount = 0;

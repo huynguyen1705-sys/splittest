@@ -232,4 +232,6 @@ export interface AnalyticsData {
   byISP: ISPBreakdownItem[];
   networkType: { mobile: number; fixed: number };
   proxyUsage: { proxy: number; direct: number };
+  // Time of day analysis
+  byHour: Record<number, number>; // hour (0-23) -> session count
 }

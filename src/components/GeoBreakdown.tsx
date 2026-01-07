@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Globe, MapPin, Building2, Wifi, WifiOff, ShieldAlert, Server } from 'lucide-react';
+import { Globe, MapPin, Building2, Wifi, WifiOff, ShieldAlert, Server, Clock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { GeoBreakdownItem, ISPBreakdownItem } from '@/types/database';
 
@@ -13,9 +13,11 @@ interface GeoBreakdownProps {
   byISP: ISPBreakdownItem[];
   networkType: { mobile: number; fixed: number };
   proxyUsage: { proxy: number; direct: number };
+  byHour: Record<number, number>;
+  timezone?: string;
 }
 
-export function GeoBreakdown({ byCity, byRegion, byISP, networkType, proxyUsage }: GeoBreakdownProps) {
+export function GeoBreakdown({ byCity, byRegion, byISP, networkType, proxyUsage, byHour, timezone }: GeoBreakdownProps) {
   const totalNetwork = networkType.mobile + networkType.fixed;
   const mobilePercent = totalNetwork > 0 ? Math.round((networkType.mobile / totalNetwork) * 100) : 0;
   const fixedPercent = 100 - mobilePercent;
@@ -38,8 +40,76 @@ export function GeoBreakdown({ byCity, byRegion, byISP, networkType, proxyUsage 
     sessions: c.sessions,
   }));
 
+  // Build hour data for all 24 hours
+  const hourChartData = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    label: `${hour.toString().padStart(2, '0')}:00`,
+    sessions: byHour[hour] || 0,
+  }));
+
+  const maxHourSessions = Math.max(...hourChartData.map(h => h.sessions), 1);
+  const peakHours = hourChartData
+    .filter(h => h.sessions > maxHourSessions * 0.7)
+    .map(h => h.label);
+
+  const hasHourData = Object.keys(byHour).length > 0;
+
   return (
     <div className="space-y-6">
+      {/* Time of Day Analysis - Full width at top */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="w-5 h-5" />
+            Traffic by Hour of Day
+          </CardTitle>
+          <CardDescription>
+            Session distribution across 24 hours {timezone && `(${timezone})`}
+            {peakHours.length > 0 && (
+              <span className="ml-2">
+                • Peak hours: <span className="font-medium text-primary">{peakHours.join(', ')}</span>
+              </span>
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!hasHourData ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Clock className="w-10 h-10 mx-auto mb-2 opacity-30" />
+              <p>No hourly data yet</p>
+              <p className="text-xs mt-1">Data will appear after new traffic arrives</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={hourChartData}>
+                <XAxis 
+                  dataKey="label" 
+                  className="text-xs" 
+                  tick={{ fontSize: 10 }}
+                  interval={2}
+                />
+                <YAxis className="text-xs" width={35} />
+                <Tooltip
+                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 12 }}
+                  labelFormatter={(_, payload) => {
+                    if (payload?.[0]?.payload) {
+                      return `${payload[0].payload.label}`;
+                    }
+                    return '';
+                  }}
+                  formatter={(value: number) => [value, 'Sessions']}
+                />
+                <Bar 
+                  dataKey="sessions" 
+                  radius={2}
+                  fill="hsl(var(--primary))"
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Geographic Drill-down */}
       <div className="grid md:grid-cols-2 gap-6">
         {/* By Region */}
