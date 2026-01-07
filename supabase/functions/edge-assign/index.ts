@@ -266,12 +266,15 @@ Deno.serve(async (req) => {
     const dnt = url.searchParams.get('dnt') === '1';
     const originalQuery = url.searchParams.get('oq') || '';
     
-    // UTM parameters for session tracking
-    const utmSource = url.searchParams.get('utm_source') || '';
-    const utmMedium = url.searchParams.get('utm_medium') || '';
-    const utmCampaign = url.searchParams.get('utm_campaign') || '';
-    const gclid = url.searchParams.get('gclid') || '';
-    const fbclid = url.searchParams.get('fbclid') || '';
+    // Parse UTM parameters from originalQuery (the visitor's original URL params)
+    const originalParams = new URLSearchParams(originalQuery);
+    const utmSource = originalParams.get('utm_source') || '';
+    const utmMedium = originalParams.get('utm_medium') || '';
+    const utmCampaign = originalParams.get('utm_campaign') || '';
+    const gclid = originalParams.get('gclid') || '';
+    const fbclid = originalParams.get('fbclid') || '';
+    
+    console.log(`UTM params from originalQuery: source=${utmSource}, medium=${utmMedium}, campaign=${utmCampaign}, gclid=${gclid ? 'yes' : 'no'}, fbclid=${fbclid ? 'yes' : 'no'}`);
 
     if (!token) {
       return new Response(JSON.stringify({ error: 'Missing token' }), {
