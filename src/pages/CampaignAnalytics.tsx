@@ -1020,6 +1020,8 @@ export default function CampaignAnalytics() {
               timezone={project?.timezone}
               byEntryPage={analytics?.byEntryPage || []}
               byExitPage={analytics?.byExitPage || []}
+              trafficSources={analytics?.trafficSources}
+              topReferrers={analytics?.topReferrers || []}
             />
 
             {/* Existing charts */}
