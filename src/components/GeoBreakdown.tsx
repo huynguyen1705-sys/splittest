@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Globe, MapPin, Building2, Wifi, WifiOff, ShieldAlert, Server, Clock, LogIn, LogOut } from 'lucide-react';
+import { Globe, MapPin, Building2, Wifi, WifiOff, ShieldAlert, Server, Clock, LogIn, LogOut, Search, Share2, Link2, DollarSign, MousePointerClick } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { GeoBreakdownItem, ISPBreakdownItem } from '@/types/database';
 
@@ -11,6 +11,21 @@ interface PageBreakdownItem {
   path: string;
   sessions: number;
   visitors: number;
+}
+
+interface TrafficSources {
+  direct: { sessions: number; visitors: number };
+  search: { sessions: number; visitors: number };
+  social: { sessions: number; visitors: number };
+  referral: { sessions: number; visitors: number };
+  paid: { sessions: number; visitors: number };
+}
+
+interface ReferrerItem {
+  domain: string;
+  sessions: number;
+  visitors: number;
+  category: string;
 }
 
 interface GeoBreakdownProps {
@@ -23,9 +38,16 @@ interface GeoBreakdownProps {
   timezone?: string;
   byEntryPage?: PageBreakdownItem[];
   byExitPage?: PageBreakdownItem[];
+  trafficSources?: TrafficSources;
+  topReferrers?: ReferrerItem[];
 }
 
-export function GeoBreakdown({ byCity, byRegion, byISP, networkType, proxyUsage, byHour, timezone, byEntryPage = [], byExitPage = [] }: GeoBreakdownProps) {
+export function GeoBreakdown({ 
+  byCity, byRegion, byISP, networkType, proxyUsage, byHour, timezone, 
+  byEntryPage = [], byExitPage = [],
+  trafficSources = { direct: { sessions: 0, visitors: 0 }, search: { sessions: 0, visitors: 0 }, social: { sessions: 0, visitors: 0 }, referral: { sessions: 0, visitors: 0 }, paid: { sessions: 0, visitors: 0 } },
+  topReferrers = []
+}: GeoBreakdownProps) {
   const totalNetwork = networkType.mobile + networkType.fixed;
   const mobilePercent = totalNetwork > 0 ? Math.round((networkType.mobile / totalNetwork) * 100) : 0;
   const fixedPercent = 100 - mobilePercent;
@@ -61,6 +83,28 @@ export function GeoBreakdown({ byCity, byRegion, byISP, networkType, proxyUsage,
     .map(h => h.label);
 
   const hasHourData = Object.keys(byHour).length > 0;
+
+  // Traffic sources data
+  const totalTraffic = trafficSources.direct.sessions + trafficSources.search.sessions + 
+    trafficSources.social.sessions + trafficSources.referral.sessions + trafficSources.paid.sessions;
+  
+  const trafficSourceData = [
+    { name: 'Direct', sessions: trafficSources.direct.sessions, visitors: trafficSources.direct.visitors, icon: MousePointerClick, color: 'hsl(var(--muted-foreground))' },
+    { name: 'Search', sessions: trafficSources.search.sessions, visitors: trafficSources.search.visitors, icon: Search, color: 'hsl(239, 84%, 67%)' },
+    { name: 'Social', sessions: trafficSources.social.sessions, visitors: trafficSources.social.visitors, icon: Share2, color: 'hsl(280, 68%, 60%)' },
+    { name: 'Referral', sessions: trafficSources.referral.sessions, visitors: trafficSources.referral.visitors, icon: Link2, color: 'hsl(160, 84%, 39%)' },
+    { name: 'Paid', sessions: trafficSources.paid.sessions, visitors: trafficSources.paid.visitors, icon: DollarSign, color: 'hsl(38, 92%, 50%)' },
+  ].filter(s => s.sessions > 0);
+
+  const getCategoryBadgeColor = (category: string) => {
+    switch (category) {
+      case 'search': return 'bg-primary/20 text-primary';
+      case 'social': return 'bg-purple-500/20 text-purple-600';
+      case 'referral': return 'bg-emerald-500/20 text-emerald-600';
+      case 'paid': return 'bg-amber-500/20 text-amber-600';
+      default: return 'bg-muted text-muted-foreground';
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -117,6 +161,105 @@ export function GeoBreakdown({ byCity, byRegion, byISP, networkType, proxyUsage,
           )}
         </CardContent>
       </Card>
+
+      {/* Traffic Sources Analysis */}
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Traffic Source Categories */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe className="w-5 h-5" />
+              Traffic Sources
+            </CardTitle>
+            <CardDescription>
+              Where your visitors come from
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {totalTraffic === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <Globe className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No traffic source data yet</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {trafficSourceData.map((source) => {
+                  const percent = totalTraffic > 0 ? Math.round((source.sessions / totalTraffic) * 100) : 0;
+                  const Icon = source.icon;
+                  return (
+                    <div key={source.name} className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="flex items-center gap-2">
+                          <Icon className="w-4 h-4" style={{ color: source.color }} />
+                          <span className="font-medium">{source.name}</span>
+                        </span>
+                        <span className="text-muted-foreground">
+                          {source.sessions} ({percent}%)
+                        </span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full rounded-full transition-all"
+                          style={{ width: `${percent}%`, backgroundColor: source.color }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Top Referrers */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Link2 className="w-5 h-5" />
+              Top Referrers
+            </CardTitle>
+            <CardDescription>
+              Websites sending traffic to you
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {topReferrers.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <Link2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No referrer data yet</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {topReferrers.slice(0, 8).map((ref, i) => {
+                  const maxSessions = topReferrers[0]?.sessions || 1;
+                  const percent = (ref.sessions / maxSessions) * 100;
+                  return (
+                    <div key={ref.domain} className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="truncate flex-1 mr-2 flex items-center gap-2">
+                          <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${getCategoryBadgeColor(ref.category)}`}>
+                            {ref.category}
+                          </Badge>
+                          <span className="truncate" title={ref.domain}>{ref.domain}</span>
+                        </span>
+                        <span className="text-muted-foreground flex-shrink-0 text-xs">
+                          {ref.sessions} · {ref.visitors} visitors
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full rounded-full transition-all"
+                          style={{ width: `${percent}%`, backgroundColor: COLORS[i % COLORS.length] }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Geographic Drill-down */}
       <div className="grid md:grid-cols-2 gap-6">

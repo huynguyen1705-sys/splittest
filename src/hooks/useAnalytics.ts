@@ -106,6 +106,15 @@ export function useAnalytics(
         // Entry/Exit pages
         byEntryPage: [],
         byExitPage: [],
+        // Traffic sources
+        trafficSources: {
+          direct: { sessions: 0, visitors: new Set() as unknown as number },
+          search: { sessions: 0, visitors: new Set() as unknown as number },
+          social: { sessions: 0, visitors: new Set() as unknown as number },
+          referral: { sessions: 0, visitors: new Set() as unknown as number },
+          paid: { sessions: 0, visitors: new Set() as unknown as number },
+        },
+        topReferrers: [],
       };
 
       // Track unique visitors and sessions directly from sessions table (most accurate)
@@ -125,6 +134,16 @@ export function useAnalytics(
       const hourMap: Record<number, number> = {}; // hour -> count
       const entryPageMap: Record<string, { sessions: number; visitors: Set<string> }> = {};
       const exitPageMap: Record<string, { sessions: number; visitors: Set<string> }> = {};
+      // Traffic source tracking
+      const trafficSourceVisitors = {
+        direct: new Set<string>(),
+        search: new Set<string>(),
+        social: new Set<string>(),
+        referral: new Set<string>(),
+        paid: new Set<string>(),
+      };
+      const trafficSourceSessions = { direct: 0, search: 0, social: 0, referral: 0, paid: 0 };
+      const referrerDetailMap: Record<string, { sessions: number; visitors: Set<string>; category: string }> = {};
       let mobileCount = 0;
       let fixedCount = 0;
       let proxyCount = 0;
@@ -202,6 +221,56 @@ export function useAnalytics(
           exitPageMap[session.exit_page].sessions++;
           if (visitorHash) exitPageMap[session.exit_page].visitors.add(visitorHash);
         }
+
+        // Traffic source categorization
+        const categorizeReferrer = (referrer: string | null, utmSource: string | null, utmMedium: string | null, gclid: string | null, fbclid: string | null): { category: string; domain: string } => {
+          // Paid traffic detection
+          if (gclid || fbclid || utmMedium === 'cpc' || utmMedium === 'ppc' || utmMedium === 'paid') {
+            return { category: 'paid', domain: utmSource || (gclid ? 'google' : fbclid ? 'facebook' : 'paid') };
+          }
+
+          if (!referrer) {
+            return { category: 'direct', domain: 'Direct' };
+          }
+
+          let domain: string;
+          try {
+            domain = new URL(referrer).hostname.replace('www.', '');
+          } catch {
+            domain = referrer;
+          }
+
+          // Search engines
+          const searchEngines = ['google', 'bing', 'yahoo', 'duckduckgo', 'baidu', 'yandex', 'ecosia', 'ask', 'aol'];
+          if (searchEngines.some(se => domain.includes(se))) {
+            return { category: 'search', domain };
+          }
+
+          // Social media
+          const socialNetworks = ['facebook', 'twitter', 'instagram', 'linkedin', 'pinterest', 'tiktok', 'reddit', 'youtube', 'snapchat', 'whatsapp', 't.co', 'fb.com', 'lnkd.in'];
+          if (socialNetworks.some(sn => domain.includes(sn))) {
+            return { category: 'social', domain };
+          }
+
+          return { category: 'referral', domain };
+        };
+
+        const { category, domain } = categorizeReferrer(session.referrer, session.utm_source, session.utm_medium, session.gclid, session.fbclid);
+        
+        // Track traffic source category
+        trafficSourceSessions[category as keyof typeof trafficSourceSessions]++;
+        if (visitorHash) {
+          trafficSourceVisitors[category as keyof typeof trafficSourceVisitors].add(visitorHash);
+        }
+
+        // Track detailed referrer
+        if (domain && domain !== 'Direct') {
+          if (!referrerDetailMap[domain]) {
+            referrerDetailMap[domain] = { sessions: 0, visitors: new Set(), category };
+          }
+          referrerDetailMap[domain].sessions++;
+          if (visitorHash) referrerDetailMap[domain].visitors.add(visitorHash);
+        }
         
         // Determine UTM source
         let source = session.utm_source;
@@ -236,18 +305,18 @@ export function useAnalytics(
         }
         
         if (session.referrer) {
-          let domain: string;
+          let refDomain: string;
           try {
-            domain = new URL(session.referrer).hostname.replace('www.', '');
+            refDomain = new URL(session.referrer).hostname.replace('www.', '');
           } catch {
-            domain = session.referrer;
+            refDomain = session.referrer;
           }
-          if (!analytics.byReferrer[domain]) {
-            analytics.byReferrer[domain] = { sessions: 0, uniqueVisitors: 0 };
-            referrerVisitors[domain] = new Set();
+          if (!analytics.byReferrer[refDomain]) {
+            analytics.byReferrer[refDomain] = { sessions: 0, uniqueVisitors: 0 };
+            referrerVisitors[refDomain] = new Set();
           }
-          analytics.byReferrer[domain].sessions += 1;
-          if (visitorHash) referrerVisitors[domain].add(visitorHash);
+          analytics.byReferrer[refDomain].sessions += 1;
+          if (visitorHash) referrerVisitors[refDomain].add(visitorHash);
         }
       });
       
@@ -303,6 +372,20 @@ export function useAnalytics(
 
       analytics.byExitPage = Object.entries(exitPageMap)
         .map(([path, data]) => ({ path, sessions: data.sessions, visitors: data.visitors.size }))
+        .sort((a, b) => b.sessions - a.sessions)
+        .slice(0, 15);
+
+      // Build traffic sources summary
+      analytics.trafficSources = {
+        direct: { sessions: trafficSourceSessions.direct, visitors: trafficSourceVisitors.direct.size },
+        search: { sessions: trafficSourceSessions.search, visitors: trafficSourceVisitors.search.size },
+        social: { sessions: trafficSourceSessions.social, visitors: trafficSourceVisitors.social.size },
+        referral: { sessions: trafficSourceSessions.referral, visitors: trafficSourceVisitors.referral.size },
+        paid: { sessions: trafficSourceSessions.paid, visitors: trafficSourceVisitors.paid.size },
+      };
+
+      analytics.topReferrers = Object.entries(referrerDetailMap)
+        .map(([domain, data]) => ({ domain, sessions: data.sessions, visitors: data.visitors.size, category: data.category }))
         .sort((a, b) => b.sessions - a.sessions)
         .slice(0, 15);
 

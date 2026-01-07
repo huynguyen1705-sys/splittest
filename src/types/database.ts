@@ -237,4 +237,13 @@ export interface AnalyticsData {
   // Entry/Exit pages analysis
   byEntryPage: Array<{ path: string; sessions: number; visitors: number }>;
   byExitPage: Array<{ path: string; sessions: number; visitors: number }>;
+  // Traffic source categories
+  trafficSources: {
+    direct: { sessions: number; visitors: number };
+    search: { sessions: number; visitors: number };
+    social: { sessions: number; visitors: number };
+    referral: { sessions: number; visitors: number };
+    paid: { sessions: number; visitors: number };
+  };
+  topReferrers: Array<{ domain: string; sessions: number; visitors: number; category: string }>;
 }
