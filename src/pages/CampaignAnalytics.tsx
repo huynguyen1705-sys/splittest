@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils';
 import { calculateSignificance, analyticsToVariantStats, VariantStats, SignificanceResult } from '@/lib/statistics';
 import { StatisticalSignificance, MultiVariantSignificanceSummary } from '@/components/StatisticalSignificance';
 import { SplitTestResults, SplitTestSummaryBadge } from '@/components/SplitTestResults';
+import { GeoBreakdown } from '@/components/GeoBreakdown';
 
 const COLORS = ['hsl(239, 84%, 67%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(199, 89%, 48%)', 'hsl(280, 68%, 60%)'];
 
@@ -1008,6 +1009,16 @@ export default function CampaignAnalytics() {
           </TabsContent>
 
           <TabsContent value="breakdown" className="space-y-6">
+            {/* Geographic Deep Dive */}
+            <GeoBreakdown
+              byCity={analytics?.byCity || []}
+              byRegion={analytics?.byRegion || []}
+              byISP={analytics?.byISP || []}
+              networkType={analytics?.networkType || { mobile: 0, fixed: 0 }}
+              proxyUsage={analytics?.proxyUsage || { proxy: 0, direct: 0 }}
+            />
+
+            {/* Existing charts */}
             <div className="grid md:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>

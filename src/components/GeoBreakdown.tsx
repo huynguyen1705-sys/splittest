@@ -1,0 +1,306 @@
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Globe, MapPin, Building2, Wifi, WifiOff, ShieldAlert, Server } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { GeoBreakdownItem, ISPBreakdownItem } from '@/types/database';
+
+const COLORS = ['hsl(239, 84%, 67%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(199, 89%, 48%)', 'hsl(280, 68%, 60%)'];
+
+interface GeoBreakdownProps {
+  byCity: GeoBreakdownItem[];
+  byRegion: GeoBreakdownItem[];
+  byISP: ISPBreakdownItem[];
+  networkType: { mobile: number; fixed: number };
+  proxyUsage: { proxy: number; direct: number };
+}
+
+export function GeoBreakdown({ byCity, byRegion, byISP, networkType, proxyUsage }: GeoBreakdownProps) {
+  const totalNetwork = networkType.mobile + networkType.fixed;
+  const mobilePercent = totalNetwork > 0 ? Math.round((networkType.mobile / totalNetwork) * 100) : 0;
+  const fixedPercent = 100 - mobilePercent;
+
+  const totalProxy = proxyUsage.proxy + proxyUsage.direct;
+  const proxyPercent = totalProxy > 0 ? Math.round((proxyUsage.proxy / totalProxy) * 100) : 0;
+
+  const networkData = [
+    { name: 'Mobile', value: networkType.mobile },
+    { name: 'Fixed', value: networkType.fixed },
+  ].filter(d => d.value > 0);
+
+  const regionChartData = byRegion.slice(0, 8).map(r => ({
+    name: r.name,
+    sessions: r.sessions,
+  }));
+
+  const cityChartData = byCity.slice(0, 8).map(c => ({
+    name: c.name,
+    sessions: c.sessions,
+  }));
+
+  return (
+    <div className="space-y-6">
+      {/* Geographic Drill-down */}
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* By Region */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MapPin className="w-5 h-5" />
+              By Region / Province
+            </CardTitle>
+            <CardDescription>
+              Traffic breakdown by state or province
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {regionChartData.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <MapPin className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                <p>No region data yet</p>
+                <p className="text-xs mt-1">Region data will appear after new traffic arrives</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={regionChartData} layout="vertical">
+                  <XAxis type="number" className="text-xs" />
+                  <YAxis type="category" dataKey="name" className="text-xs" width={80} tick={{ fontSize: 11 }} />
+                  <Tooltip 
+                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 12 }}
+                  />
+                  <Bar dataKey="sessions" fill="hsl(var(--primary))" radius={4} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* By City */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5" />
+              By City
+            </CardTitle>
+            <CardDescription>
+              Top cities by session count
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {cityChartData.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Building2 className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                <p>No city data yet</p>
+                <p className="text-xs mt-1">City data will appear after new traffic arrives</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={cityChartData} layout="vertical">
+                  <XAxis type="number" className="text-xs" />
+                  <YAxis type="category" dataKey="name" className="text-xs" width={80} tick={{ fontSize: 11 }} />
+                  <Tooltip 
+                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 12 }}
+                  />
+                  <Bar dataKey="sessions" fill="hsl(160, 84%, 39%)" radius={4} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Network Analysis */}
+      <div className="grid md:grid-cols-3 gap-6">
+        {/* Top ISPs */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Server className="w-5 h-5" />
+              Top ISPs
+            </CardTitle>
+            <CardDescription>
+              Internet service providers
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {byISP.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <Server className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No ISP data yet</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {byISP.slice(0, 6).map((item, i) => {
+                  const maxSessions = byISP[0]?.sessions || 1;
+                  const percent = (item.sessions / maxSessions) * 100;
+                  return (
+                    <div key={item.isp} className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="truncate flex-1 mr-2 flex items-center gap-1">
+                          {item.isMobile && <Badge variant="outline" className="text-[9px] px-1 py-0">Mobile</Badge>}
+                          <span className="truncate" title={item.isp}>{item.isp}</span>
+                        </span>
+                        <span className="text-muted-foreground flex-shrink-0">{item.sessions}</span>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full rounded-full transition-all"
+                          style={{ width: `${percent}%`, backgroundColor: COLORS[i % COLORS.length] }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Network Type */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wifi className="w-5 h-5" />
+              Network Type
+            </CardTitle>
+            <CardDescription>
+              Mobile vs Fixed connections
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {totalNetwork === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <Wifi className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No network data yet</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <ResponsiveContainer width="100%" height={120}>
+                  <PieChart>
+                    <Pie
+                      data={networkData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={30}
+                      outerRadius={50}
+                    >
+                      <Cell fill="hsl(var(--primary))" />
+                      <Cell fill="hsl(var(--muted-foreground))" />
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex justify-center gap-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-primary" />
+                    <span>Mobile: {mobilePercent}%</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-muted-foreground" />
+                    <span>Fixed: {fixedPercent}%</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* VPN/Proxy Detection */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5" />
+              VPN / Proxy
+            </CardTitle>
+            <CardDescription>
+              Traffic through VPN or proxy
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {totalProxy === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <ShieldAlert className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No proxy data yet</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="text-center">
+                  <div className={`text-4xl font-bold ${proxyPercent > 20 ? 'text-destructive' : proxyPercent > 10 ? 'text-yellow-500' : 'text-success'}`}>
+                    {proxyPercent}%
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {proxyUsage.proxy} of {totalProxy} sessions
+                  </p>
+                </div>
+                <Progress 
+                  value={proxyPercent} 
+                  className="h-2"
+                />
+                {proxyPercent > 20 && (
+                  <p className="text-xs text-destructive text-center">
+                    ⚠️ High VPN/proxy usage may indicate bot traffic
+                  </p>
+                )}
+                {proxyPercent <= 10 && (
+                  <p className="text-xs text-success text-center">
+                    ✓ Normal proxy usage levels
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Detailed Geographic Table */}
+      {(byCity.length > 0 || byRegion.length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe className="w-5 h-5" />
+              Detailed Geographic Breakdown
+            </CardTitle>
+            <CardDescription>
+              Sessions and unique visitors by location
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 px-3 font-medium">City</th>
+                    <th className="text-left py-2 px-3 font-medium">Region</th>
+                    <th className="text-left py-2 px-3 font-medium">Country</th>
+                    <th className="text-right py-2 px-3 font-medium">Sessions</th>
+                    <th className="text-right py-2 px-3 font-medium">Visitors</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {byCity.slice(0, 10).map((city, i) => {
+                    const region = byRegion.find(r => r.country === city.country);
+                    return (
+                      <tr key={`${city.name}-${city.country}-${i}`} className="border-b border-border/50 hover:bg-muted/50">
+                        <td className="py-2 px-3 font-medium">{city.name}</td>
+                        <td className="py-2 px-3 text-muted-foreground">{region?.name || '-'}</td>
+                        <td className="py-2 px-3">
+                          <Badge variant="outline" className="text-xs">
+                            {city.country}
+                          </Badge>
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono">{city.sessions}</td>
+                        <td className="py-2 px-3 text-right font-mono text-primary">{city.visitors}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}

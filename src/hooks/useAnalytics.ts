@@ -62,10 +62,10 @@ export function useAnalytics(
         .eq('campaign_id', campaignId)
         .gte('ts', fiveMinutesAgo.toISOString());
 
-      // Fetch sessions data for unique visitors/sessions and UTM attribution
+      // Fetch sessions data for unique visitors/sessions, UTM attribution, and geo breakdown
       let sessionsQuery = supabase
         .from('sessions')
-        .select('id, utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer, visitor_key_hash, is_bot_suspected, session_key')
+        .select('id, utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer, visitor_key_hash, is_bot_suspected, session_key, city, region, country, isp, is_mobile, is_proxy')
         .eq('campaign_id', campaignId)
         .gte('started_at', startTime.toISOString())
         .lte('started_at', endTime.toISOString());
@@ -95,6 +95,12 @@ export function useAnalytics(
         byUtmCampaign: {},
         byReferrer: {},
         timeSeries: [],
+        // Geo breakdown
+        byCity: [],
+        byRegion: [],
+        byISP: [],
+        networkType: { mobile: 0, fixed: 0 },
+        proxyUsage: { proxy: 0, direct: 0 },
       };
 
       // Track unique visitors and sessions directly from sessions table (most accurate)
@@ -107,6 +113,15 @@ export function useAnalytics(
       const utmCampaignVisitors: Record<string, Set<string>> = {};
       const referrerVisitors: Record<string, Set<string>> = {};
 
+      // Geo breakdown tracking
+      const cityMap: Record<string, { sessions: number; visitors: Set<string>; country: string }> = {};
+      const regionMap: Record<string, { sessions: number; visitors: Set<string>; country: string }> = {};
+      const ispMap: Record<string, { sessions: number; isMobile: boolean }> = {};
+      let mobileCount = 0;
+      let fixedCount = 0;
+      let proxyCount = 0;
+      let directCount = 0;
+
       // Process sessions data - calculate global unique visitors/sessions AND UTM attribution
       (sessionsData || []).forEach((session) => {
         const visitorHash = session.visitor_key_hash || '';
@@ -115,6 +130,46 @@ export function useAnalytics(
         // Track global unique visitors and sessions
         if (visitorHash) globalVisitorHashes.add(visitorHash);
         if (sessionKey) globalSessionKeys.add(sessionKey);
+
+        // Geo breakdown
+        if (session.city) {
+          const cityKey = `${session.city}|${session.country || 'Unknown'}`;
+          if (!cityMap[cityKey]) {
+            cityMap[cityKey] = { sessions: 0, visitors: new Set(), country: session.country || 'Unknown' };
+          }
+          cityMap[cityKey].sessions++;
+          if (visitorHash) cityMap[cityKey].visitors.add(visitorHash);
+        }
+
+        if (session.region) {
+          const regionKey = `${session.region}|${session.country || 'Unknown'}`;
+          if (!regionMap[regionKey]) {
+            regionMap[regionKey] = { sessions: 0, visitors: new Set(), country: session.country || 'Unknown' };
+          }
+          regionMap[regionKey].sessions++;
+          if (visitorHash) regionMap[regionKey].visitors.add(visitorHash);
+        }
+
+        if (session.isp) {
+          if (!ispMap[session.isp]) {
+            ispMap[session.isp] = { sessions: 0, isMobile: session.is_mobile || false };
+          }
+          ispMap[session.isp].sessions++;
+        }
+
+        // Network type
+        if (session.is_mobile) {
+          mobileCount++;
+        } else {
+          fixedCount++;
+        }
+
+        // Proxy usage
+        if (session.is_proxy) {
+          proxyCount++;
+        } else {
+          directCount++;
+        }
         
         // Determine UTM source
         let source = session.utm_source;
@@ -181,6 +236,31 @@ export function useAnalytics(
       Object.keys(referrerVisitors).forEach(key => {
         analytics.byReferrer[key].uniqueVisitors = referrerVisitors[key].size;
       });
+
+      // Build geo breakdown arrays (sorted by sessions desc)
+      analytics.byCity = Object.entries(cityMap)
+        .map(([key, data]) => {
+          const [name] = key.split('|');
+          return { name, country: data.country, sessions: data.sessions, visitors: data.visitors.size };
+        })
+        .sort((a, b) => b.sessions - a.sessions)
+        .slice(0, 15);
+
+      analytics.byRegion = Object.entries(regionMap)
+        .map(([key, data]) => {
+          const [name] = key.split('|');
+          return { name, country: data.country, sessions: data.sessions, visitors: data.visitors.size };
+        })
+        .sort((a, b) => b.sessions - a.sessions)
+        .slice(0, 15);
+
+      analytics.byISP = Object.entries(ispMap)
+        .map(([isp, data]) => ({ isp, sessions: data.sessions, isMobile: data.isMobile }))
+        .sort((a, b) => b.sessions - a.sessions)
+        .slice(0, 10);
+
+      analytics.networkType = { mobile: mobileCount, fixed: fixedCount };
+      analytics.proxyUsage = { proxy: proxyCount, direct: directCount };
 
       let totalTTR = 0;
       let ttrCount = 0;

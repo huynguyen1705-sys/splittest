@@ -189,6 +189,19 @@ export interface CampaignWithDetails extends Campaign {
   project?: Project;
 }
 
+export interface GeoBreakdownItem {
+  name: string;
+  country?: string;
+  sessions: number;
+  visitors: number;
+}
+
+export interface ISPBreakdownItem {
+  isp: string;
+  sessions: number;
+  isMobile: boolean;
+}
+
 export interface AnalyticsData {
   totalAssigns: number;
   totalRedirectsOk: number;
@@ -213,4 +226,10 @@ export interface AnalyticsData {
   byUtmCampaign: Record<string, { sessions: number; uniqueVisitors: number }>;
   byReferrer: Record<string, { sessions: number; uniqueVisitors: number }>;
   timeSeries: { ts: string; assigns: number; redirectsOk: number; uniqueVisitors?: number }[];
+  // Geographic deep dive
+  byCity: GeoBreakdownItem[];
+  byRegion: GeoBreakdownItem[];
+  byISP: ISPBreakdownItem[];
+  networkType: { mobile: number; fixed: number };
+  proxyUsage: { proxy: number; direct: number };
 }
