@@ -61,10 +61,10 @@ export function useAnalytics(
         .eq('campaign_id', campaignId)
         .gte('ts', fiveMinutesAgo.toISOString());
 
-      // Fetch UTM data directly from sessions table using campaign_id
+      // Fetch UTM data directly from sessions table using campaign_id (including visitor_key_hash for unique counting)
       const { data: sessionsData } = await supabase
         .from('sessions')
-        .select('utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer')
+        .select('utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer, visitor_key_hash')
         .eq('campaign_id', campaignId)
         .gte('started_at', startTime.toISOString());
 
@@ -89,29 +89,76 @@ export function useAnalytics(
         timeSeries: [],
       };
 
+      // Track unique visitors per UTM dimension
+      const utmSourceVisitors: Record<string, Set<string>> = {};
+      const utmMediumVisitors: Record<string, Set<string>> = {};
+      const utmCampaignVisitors: Record<string, Set<string>> = {};
+      const referrerVisitors: Record<string, Set<string>> = {};
+
       // Process UTM data from sessions
       (sessionsData || []).forEach((session) => {
-        if (session.utm_source) {
-          analytics.byUtmSource[session.utm_source] = (analytics.byUtmSource[session.utm_source] || 0) + 1;
-        } else if (session.gclid) {
-          analytics.byUtmSource['google'] = (analytics.byUtmSource['google'] || 0) + 1;
-        } else if (session.fbclid) {
-          analytics.byUtmSource['facebook'] = (analytics.byUtmSource['facebook'] || 0) + 1;
-        }
-        if (session.utm_medium) {
-          analytics.byUtmMedium[session.utm_medium] = (analytics.byUtmMedium[session.utm_medium] || 0) + 1;
-        }
-        if (session.utm_campaign) {
-          analytics.byUtmCampaign[session.utm_campaign] = (analytics.byUtmCampaign[session.utm_campaign] || 0) + 1;
-        }
-        if (session.referrer) {
-          try {
-            const domain = new URL(session.referrer).hostname.replace('www.', '');
-            analytics.byReferrer[domain] = (analytics.byReferrer[domain] || 0) + 1;
-          } catch {
-            analytics.byReferrer[session.referrer] = (analytics.byReferrer[session.referrer] || 0) + 1;
+        const visitorHash = session.visitor_key_hash || '';
+        
+        // Determine UTM source
+        let source = session.utm_source;
+        if (!source && session.gclid) source = 'google';
+        if (!source && session.fbclid) source = 'facebook';
+        
+        if (source) {
+          if (!analytics.byUtmSource[source]) {
+            analytics.byUtmSource[source] = { sessions: 0, uniqueVisitors: 0 };
+            utmSourceVisitors[source] = new Set();
           }
+          analytics.byUtmSource[source].sessions += 1;
+          if (visitorHash) utmSourceVisitors[source].add(visitorHash);
         }
+        
+        if (session.utm_medium) {
+          if (!analytics.byUtmMedium[session.utm_medium]) {
+            analytics.byUtmMedium[session.utm_medium] = { sessions: 0, uniqueVisitors: 0 };
+            utmMediumVisitors[session.utm_medium] = new Set();
+          }
+          analytics.byUtmMedium[session.utm_medium].sessions += 1;
+          if (visitorHash) utmMediumVisitors[session.utm_medium].add(visitorHash);
+        }
+        
+        if (session.utm_campaign) {
+          if (!analytics.byUtmCampaign[session.utm_campaign]) {
+            analytics.byUtmCampaign[session.utm_campaign] = { sessions: 0, uniqueVisitors: 0 };
+            utmCampaignVisitors[session.utm_campaign] = new Set();
+          }
+          analytics.byUtmCampaign[session.utm_campaign].sessions += 1;
+          if (visitorHash) utmCampaignVisitors[session.utm_campaign].add(visitorHash);
+        }
+        
+        if (session.referrer) {
+          let domain: string;
+          try {
+            domain = new URL(session.referrer).hostname.replace('www.', '');
+          } catch {
+            domain = session.referrer;
+          }
+          if (!analytics.byReferrer[domain]) {
+            analytics.byReferrer[domain] = { sessions: 0, uniqueVisitors: 0 };
+            referrerVisitors[domain] = new Set();
+          }
+          analytics.byReferrer[domain].sessions += 1;
+          if (visitorHash) referrerVisitors[domain].add(visitorHash);
+        }
+      });
+
+      // Calculate unique visitors counts
+      Object.keys(utmSourceVisitors).forEach(key => {
+        analytics.byUtmSource[key].uniqueVisitors = utmSourceVisitors[key].size;
+      });
+      Object.keys(utmMediumVisitors).forEach(key => {
+        analytics.byUtmMedium[key].uniqueVisitors = utmMediumVisitors[key].size;
+      });
+      Object.keys(utmCampaignVisitors).forEach(key => {
+        analytics.byUtmCampaign[key].uniqueVisitors = utmCampaignVisitors[key].size;
+      });
+      Object.keys(referrerVisitors).forEach(key => {
+        analytics.byReferrer[key].uniqueVisitors = referrerVisitors[key].size;
       });
 
       let totalTTR = 0;

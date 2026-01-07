@@ -161,26 +161,26 @@ export default function CampaignAnalytics() {
   const browserData = Object.entries(analytics?.byBrowser || {})
     .map(([name, value]) => ({ name, value }));
 
-  // UTM data
+  // UTM data - now with sessions and uniqueVisitors
   const utmSourceData = Object.entries(analytics?.byUtmSource || {})
-    .sort((a, b) => b[1] - a[1])
+    .sort((a, b) => b[1].sessions - a[1].sessions)
     .slice(0, 10)
-    .map(([name, value]) => ({ name: name || 'Direct', value }));
+    .map(([name, data]) => ({ name: name || 'Direct', sessions: data.sessions, uniqueVisitors: data.uniqueVisitors }));
 
   const utmMediumData = Object.entries(analytics?.byUtmMedium || {})
-    .sort((a, b) => b[1] - a[1])
+    .sort((a, b) => b[1].sessions - a[1].sessions)
     .slice(0, 10)
-    .map(([name, value]) => ({ name, value }));
+    .map(([name, data]) => ({ name, sessions: data.sessions, uniqueVisitors: data.uniqueVisitors }));
 
   const utmCampaignData = Object.entries(analytics?.byUtmCampaign || {})
-    .sort((a, b) => b[1] - a[1])
+    .sort((a, b) => b[1].sessions - a[1].sessions)
     .slice(0, 10)
-    .map(([name, value]) => ({ name, value }));
+    .map(([name, data]) => ({ name, sessions: data.sessions, uniqueVisitors: data.uniqueVisitors }));
 
   const referrerData = Object.entries(analytics?.byReferrer || {})
-    .sort((a, b) => b[1] - a[1])
+    .sort((a, b) => b[1].sessions - a[1].sessions)
     .slice(0, 10)
-    .map(([name, value]) => ({ name, value }));
+    .map(([name, data]) => ({ name, sessions: data.sessions, uniqueVisitors: data.uniqueVisitors }));
 
   return (
     <div className="min-h-screen bg-background">
@@ -623,8 +623,8 @@ export default function CampaignAnalytics() {
                   ) : (
                     <div className="space-y-3">
                       {utmSourceData.map((item, i) => {
-                        const total = utmSourceData.reduce((s, x) => s + x.value, 0);
-                        const percent = total > 0 ? (item.value / total) * 100 : 0;
+                        const total = utmSourceData.reduce((s, x) => s + x.sessions, 0);
+                        const percent = total > 0 ? (item.sessions / total) * 100 : 0;
                         return (
                           <div key={item.name} className="space-y-1">
                             <div className="flex justify-between text-sm">
@@ -636,8 +636,11 @@ export default function CampaignAnalytics() {
                                 )}
                                 {item.name}
                               </span>
-                              <span className="text-muted-foreground">
-                                {item.value} ({percent.toFixed(1)}%)
+                              <span className="text-muted-foreground flex items-center gap-2">
+                                <span title="Sessions">{item.sessions} sessions</span>
+                                <span className="text-xs text-primary" title="Unique Visitors">
+                                  ({item.uniqueVisitors} visitors)
+                                </span>
                               </span>
                             </div>
                             <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -680,24 +683,20 @@ export default function CampaignAnalytics() {
                       </p>
                     </div>
                   ) : (
-                    <ResponsiveContainer width="100%" height={200}>
-                      <PieChart>
-                        <Pie
-                          data={utmMediumData}
-                          dataKey="value"
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={80}
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        >
-                          {utmMediumData.map((_, i) => (
-                            <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
+                    <div className="space-y-2">
+                      {utmMediumData.map((item, i) => (
+                        <div key={item.name} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
+                          <span className="font-medium flex items-center gap-2">
+                            <span style={{ color: COLORS[i % COLORS.length] }}>●</span>
+                            {item.name}
+                          </span>
+                          <span className="text-muted-foreground flex items-center gap-2">
+                            <span>{item.sessions} sessions</span>
+                            <span className="text-xs text-primary">({item.uniqueVisitors} visitors)</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -722,14 +721,20 @@ export default function CampaignAnalytics() {
                       </p>
                     </div>
                   ) : (
-                    <ResponsiveContainer width="100%" height={200}>
-                      <BarChart data={utmCampaignData} layout="vertical">
-                        <XAxis type="number" className="text-xs" />
-                        <YAxis type="category" dataKey="name" className="text-xs" width={100} />
-                        <Tooltip />
-                        <Bar dataKey="value" fill="hsl(var(--primary))" radius={4} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <div className="space-y-2">
+                      {utmCampaignData.map((item, i) => (
+                        <div key={item.name} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
+                          <span className="font-medium flex items-center gap-2">
+                            <span style={{ color: COLORS[i % COLORS.length] }}>●</span>
+                            {item.name}
+                          </span>
+                          <span className="text-muted-foreground flex items-center gap-2">
+                            <span>{item.sessions} sessions</span>
+                            <span className="text-xs text-primary">({item.uniqueVisitors} visitors)</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -760,9 +765,12 @@ export default function CampaignAnalytics() {
                           <span className="text-sm font-medium truncate flex-1 mr-2" title={item.name}>
                             {item.name}
                           </span>
-                          <Badge variant="secondary" className="text-xs">
-                            {item.value}
-                          </Badge>
+                          <span className="text-muted-foreground flex items-center gap-2 flex-shrink-0">
+                            <Badge variant="secondary" className="text-xs">
+                              {item.sessions} sessions
+                            </Badge>
+                            <span className="text-xs text-primary">({item.uniqueVisitors} visitors)</span>
+                          </span>
                         </div>
                       ))}
                     </div>
