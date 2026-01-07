@@ -143,29 +143,19 @@ export default function CampaignAnalytics() {
     );
   }
 
-  if (!campaign) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-2">Campaign not found</h1>
-          <Link to={`/project/${projectId}`}>
-            <Button>Back to Project</Button>
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const variantData = campaign.variants?.map((v, i) => ({
-    id: v.id,
-    name: v.name,
-    isControl: v.is_control,
-    assigns: analytics?.byVariant[v.id]?.assigns || 0,
-    redirectsOk: analytics?.byVariant[v.id]?.redirectsOk || 0,
-    redirectsFail: analytics?.byVariant[v.id]?.redirectsFail || 0,
-    uniqueVisitors: analytics?.byVariant[v.id]?.uniqueVisitors || 0,
-    color: COLORS[i % COLORS.length],
-  })) || [];
+  const variantData = useMemo(() => {
+    if (!campaign?.variants) return [];
+    return campaign.variants.map((v, i) => ({
+      id: v.id,
+      name: v.name,
+      isControl: v.is_control,
+      assigns: analytics?.byVariant[v.id]?.assigns || 0,
+      redirectsOk: analytics?.byVariant[v.id]?.redirectsOk || 0,
+      redirectsFail: analytics?.byVariant[v.id]?.redirectsFail || 0,
+      uniqueVisitors: analytics?.byVariant[v.id]?.uniqueVisitors || 0,
+      color: COLORS[i % COLORS.length],
+    }));
+  }, [campaign?.variants, analytics?.byVariant]);
 
   // Calculate statistical significance
   const significanceData = useMemo(() => {
@@ -204,6 +194,19 @@ export default function CampaignAnalytics() {
       controlName: control.name,
     };
   }, [variantData]);
+
+  if (!campaign) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-2">Campaign not found</h1>
+          <Link to={`/project/${projectId}`}>
+            <Button>Back to Project</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const countryData = Object.entries(analytics?.byCountry || {})
     .sort((a, b) => b[1] - a[1])
