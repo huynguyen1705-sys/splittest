@@ -246,4 +246,6 @@ export interface AnalyticsData {
     paid: { sessions: number; visitors: number };
   };
   topReferrers: Array<{ domain: string; sessions: number; visitors: number; category: string }>;
+  // Heatmap data: day of week (0-6) -> hour (0-23) -> session count
+  heatmapData: Record<number, Record<number, number>>;
 }

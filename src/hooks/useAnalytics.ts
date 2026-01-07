@@ -115,6 +115,7 @@ export function useAnalytics(
           paid: { sessions: 0, visitors: new Set() as unknown as number },
         },
         topReferrers: [],
+        heatmapData: {},
       };
 
       // Track unique visitors and sessions directly from sessions table (most accurate)
@@ -132,6 +133,7 @@ export function useAnalytics(
       const regionMap: Record<string, { sessions: number; visitors: Set<string>; country: string }> = {};
       const ispMap: Record<string, { sessions: number; isMobile: boolean }> = {};
       const hourMap: Record<number, number> = {}; // hour -> count
+      const heatmapMap: Record<number, Record<number, number>> = {}; // day -> hour -> count
       const entryPageMap: Record<string, { sessions: number; visitors: Set<string> }> = {};
       const exitPageMap: Record<string, { sessions: number; visitors: Set<string> }> = {};
       // Traffic source tracking
@@ -200,8 +202,17 @@ export function useAnalytics(
 
         // Time of day analysis
         if (session.started_at) {
-          const hour = new Date(session.started_at).getHours();
+          const date = new Date(session.started_at);
+          const hour = date.getHours();
+          const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
+          
           hourMap[hour] = (hourMap[hour] || 0) + 1;
+          
+          // Heatmap data
+          if (!heatmapMap[dayOfWeek]) {
+            heatmapMap[dayOfWeek] = {};
+          }
+          heatmapMap[dayOfWeek][hour] = (heatmapMap[dayOfWeek][hour] || 0) + 1;
         }
 
         // Entry page tracking
@@ -388,6 +399,8 @@ export function useAnalytics(
         .map(([domain, data]) => ({ domain, sessions: data.sessions, visitors: data.visitors.size, category: data.category }))
         .sort((a, b) => b.sessions - a.sessions)
         .slice(0, 15);
+
+      analytics.heatmapData = heatmapMap;
 
       let totalTTR = 0;
       let ttrCount = 0;
