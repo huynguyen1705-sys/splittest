@@ -4,6 +4,9 @@ import { format } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
 import { useCampaign, useUpdateCampaign } from '@/hooks/useCampaigns';
 import { useAnalytics, useRealtimeEvents, TimeRangePreset, DateRange } from '@/hooks/useAnalytics';
+import { useBotAnalytics } from '@/hooks/useBotAnalytics';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ArrowLeft, Play, Pause, Activity, Users, CheckCircle, XCircle, Clock, Globe, Monitor, Chrome, Settings, Wifi, WifiOff, RefreshCw, Zap, TrendingUp, Percent, Share2, Link2, Megaphone, CalendarIcon } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Activity, Users, CheckCircle, XCircle, Clock, Globe, Monitor, Chrome, Settings, Wifi, WifiOff, RefreshCw, Zap, TrendingUp, Percent, Share2, Link2, Megaphone, CalendarIcon, Bot, ShieldAlert, AlertTriangle } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { CampaignStatus } from '@/types/database';
 import { supabase } from '@/integrations/supabase/client';
@@ -38,6 +41,7 @@ export default function CampaignAnalytics() {
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const { data: analytics, isLoading: analyticsLoading } = useAnalytics(campaignId, timeRange, customRange);
   const { events: realtimeEvents, newEventCount, lastEventTime, isLive } = useRealtimeEvents(campaignId);
+  const { data: botAnalytics, isLoading: botAnalyticsLoading } = useBotAnalytics(campaignId);
   const navigate = useNavigate();
   const [isSendingTestEvent, setIsSendingTestEvent] = useState(false);
   const [testEventType, setTestEventType] = useState<'assign' | 'redirect_ok' | 'redirect_fail'>('assign');
@@ -315,6 +319,15 @@ export default function CampaignAnalytics() {
                 )}
               </TabsTrigger>
               <TabsTrigger value="breakdown" className="text-xs sm:text-sm">Breakdown</TabsTrigger>
+              <TabsTrigger value="bot-traffic" className="text-xs sm:text-sm flex items-center gap-1">
+                <Bot className="w-3 h-3" />
+                Bot Traffic
+                {(botAnalytics?.suspectedBotSessions || 0) > 0 && (
+                  <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-destructive/20 text-destructive rounded-full">
+                    {botAnalytics?.suspectedBotSessions}
+                  </span>
+                )}
+              </TabsTrigger>
             </TabsList>
             <div className="flex items-center gap-2">
               <Select 
@@ -871,6 +884,229 @@ export default function CampaignAnalytics() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          {/* Bot Traffic Tab */}
+          <TabsContent value="bot-traffic" className="space-y-4 sm:space-y-6">
+            {botAnalyticsLoading ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28" />)}
+              </div>
+            ) : (
+              <>
+                {/* Bot Traffic Overview Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+                  <Card>
+                    <CardContent className="pt-4 sm:pt-6">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                          <Users className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <p className="text-xs sm:text-sm text-muted-foreground">Total Sessions</p>
+                          <p className="text-lg sm:text-2xl font-bold">{botAnalytics?.totalSessions?.toLocaleString() || 0}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className={botAnalytics?.suspectedBotSessions ? 'border-destructive/50' : ''}>
+                    <CardContent className="pt-4 sm:pt-6">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-destructive/10 flex items-center justify-center flex-shrink-0">
+                          <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-destructive" />
+                        </div>
+                        <div>
+                          <p className="text-xs sm:text-sm text-muted-foreground">Suspected Bots</p>
+                          <p className="text-lg sm:text-2xl font-bold text-destructive">
+                            {botAnalytics?.suspectedBotSessions?.toLocaleString() || 0}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="pt-4 sm:pt-6">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
+                          <Percent className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600" />
+                        </div>
+                        <div>
+                          <p className="text-xs sm:text-sm text-muted-foreground">Bot %</p>
+                          <p className="text-lg sm:text-2xl font-bold">
+                            {botAnalytics?.botPercentage?.toFixed(1) || 0}%
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="pt-4 sm:pt-6">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                          <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-xs sm:text-sm text-muted-foreground">Avg Bot Score</p>
+                          <p className="text-lg sm:text-2xl font-bold">{botAnalytics?.avgBotScore || 0}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
+                  {/* Score Distribution */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Activity className="w-5 h-5" />
+                        Bot Score Distribution
+                      </CardTitle>
+                      <CardDescription>
+                        Distribution of bot scores across all sessions
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {botAnalytics?.scoreDistribution?.length === 0 ? (
+                        <p className="text-muted-foreground text-center py-8">No data</p>
+                      ) : (
+                        <ResponsiveContainer width="100%" height={200}>
+                          <BarChart data={botAnalytics?.scoreDistribution || []}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="range" />
+                            <YAxis />
+                            <Tooltip />
+                            <Bar 
+                              dataKey="count" 
+                              fill="hsl(var(--primary))" 
+                              radius={4}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Bot Signals Breakdown */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <ShieldAlert className="w-5 h-5" />
+                        Detection Signals
+                      </CardTitle>
+                      <CardDescription>
+                        Which signals triggered bot detection
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {botAnalytics?.signalsBreakdown?.length === 0 ? (
+                        <p className="text-muted-foreground text-center py-8">No bot signals detected</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {botAnalytics?.signalsBreakdown?.slice(0, 6).map((item) => (
+                            <div key={item.signal} className="space-y-1">
+                              <div className="flex justify-between text-sm">
+                                <span>{item.label}</span>
+                                <span className="font-medium">{item.count}</span>
+                              </div>
+                              <Progress 
+                                value={(item.count / (botAnalytics?.totalSessions || 1)) * 100} 
+                                className="h-2"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Flagged Sessions Table */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5 text-yellow-500" />
+                      Flagged Sessions
+                    </CardTitle>
+                    <CardDescription>
+                      Sessions with elevated bot scores (sorted by score)
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {botAnalytics?.flaggedSessions?.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Bot className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                        <p>No flagged sessions yet</p>
+                        <p className="text-sm">Sessions with bot activity will appear here</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Score</TableHead>
+                              <TableHead>Visitor</TableHead>
+                              <TableHead>Country</TableHead>
+                              <TableHead>Device</TableHead>
+                              <TableHead>Browser</TableHead>
+                              <TableHead>Signals</TableHead>
+                              <TableHead>Entry Page</TableHead>
+                              <TableHead>Time</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {botAnalytics?.flaggedSessions?.map((session) => (
+                              <TableRow key={session.id}>
+                                <TableCell>
+                                  <div className={cn(
+                                    "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium",
+                                    session.bot_score >= 70 
+                                      ? "bg-destructive/20 text-destructive" 
+                                      : session.bot_score >= 40 
+                                      ? "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400"
+                                      : "bg-muted text-muted-foreground"
+                                  )}>
+                                    {session.bot_score}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="font-mono text-xs">
+                                  {session.visitor_key_hash}
+                                </TableCell>
+                                <TableCell>{session.country || '-'}</TableCell>
+                                <TableCell className="capitalize">{session.device || '-'}</TableCell>
+                                <TableCell className="capitalize">{session.browser || '-'}</TableCell>
+                                <TableCell>
+                                  <div className="flex flex-wrap gap-1">
+                                    {session.bot_signals && Object.entries(session.bot_signals)
+                                      .filter(([, v]) => v === true)
+                                      .slice(0, 3)
+                                      .map(([key]) => (
+                                        <Badge key={key} variant="outline" className="text-[10px]">
+                                          {key}
+                                        </Badge>
+                                      ))
+                                    }
+                                  </div>
+                                </TableCell>
+                                <TableCell className="max-w-[150px] truncate text-xs">
+                                  {session.entry_page || '/'}
+                                </TableCell>
+                                <TableCell className="text-xs text-muted-foreground">
+                                  {new Date(session.created_at).toLocaleString()}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </TabsContent>
         </Tabs>
       </main>
