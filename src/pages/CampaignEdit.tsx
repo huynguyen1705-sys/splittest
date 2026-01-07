@@ -12,9 +12,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Plus, Trash2, Globe, Monitor, Chrome, Smartphone, Languages, Save, Loader2, Link2, CheckCircle2, XCircle, FlaskConical, Camera, ExternalLink, ArrowRight } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Globe, Monitor, Chrome, Smartphone, Languages, Save, Loader2, Link2, CheckCircle2, XCircle, FlaskConical, Camera, ExternalLink, ArrowRight, ShieldAlert, Bot } from 'lucide-react';
 import { COUNTRIES, DEVICES, BROWSERS, OPERATING_SYSTEMS, LANGUAGES } from '@/lib/constants';
 import { toast } from '@/hooks/use-toast';
+import { BotAction } from '@/types/database';
+import { Slider } from '@/components/ui/slider';
+import { Textarea } from '@/components/ui/textarea';
 
 interface VariantInput {
   id?: string;
@@ -381,6 +384,15 @@ export default function CampaignEdit() {
   const [includePaths, setIncludePaths] = useState<string>('');
   const [urlMatchMode, setUrlMatchMode] = useState<string>('path_prefix');
   const [initialized, setInitialized] = useState(false);
+  
+  // Bot Protection State
+  const [botAction, setBotAction] = useState<BotAction>('flag_only');
+  const [botThreshold, setBotThreshold] = useState<number>(70);
+  const [honeypotUrl, setHoneypotUrl] = useState<string>('');
+  const [botWhitelistIps, setBotWhitelistIps] = useState<string>('');
+  const [botWhitelistUas, setBotWhitelistUas] = useState<string>('');
+  const [botChallengeEnabled, setBotChallengeEnabled] = useState<boolean>(false);
+  const [botSoftBlockDelay, setBotSoftBlockDelay] = useState<number>(3000);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -417,6 +429,15 @@ export default function CampaignEdit() {
         setIncludePaths((rules.include_paths || []).join('\n'));
         setUrlMatchMode(rules.url_match_mode || 'path_prefix');
       }
+      
+      // Bot Protection Settings
+      setBotAction((campaign as any).bot_action || 'flag_only');
+      setBotThreshold((campaign as any).bot_threshold ?? 70);
+      setHoneypotUrl((campaign as any).honeypot_url || '');
+      setBotWhitelistIps(((campaign as any).bot_whitelist_ips || []).join('\n'));
+      setBotWhitelistUas(((campaign as any).bot_whitelist_uas || []).join('\n'));
+      setBotChallengeEnabled((campaign as any).bot_challenge_enabled ?? false);
+      setBotSoftBlockDelay((campaign as any).bot_soft_block_delay_ms ?? 3000);
       
       setInitialized(true);
     }
@@ -501,6 +522,21 @@ export default function CampaignEdit() {
     });
   };
 
+  const handleSaveBotProtection = async () => {
+    if (!campaignId) return;
+    await updateCampaign.mutateAsync({
+      id: campaignId,
+      bot_action: botAction,
+      bot_threshold: botThreshold,
+      honeypot_url: honeypotUrl || null,
+      bot_whitelist_ips: botWhitelistIps.split('\n').map(ip => ip.trim()).filter(ip => ip),
+      bot_whitelist_uas: botWhitelistUas.split('\n').map(ua => ua.trim()).filter(ua => ua),
+      bot_challenge_enabled: botChallengeEnabled,
+      bot_soft_block_delay_ms: botSoftBlockDelay,
+    } as any);
+    toast({ title: 'Saved', description: 'Bot protection settings updated' });
+  };
+
   if (authLoading || isLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -551,6 +587,10 @@ export default function CampaignEdit() {
             <TabsTrigger value="basics">Basics</TabsTrigger>
             <TabsTrigger value="variants">Variants</TabsTrigger>
             <TabsTrigger value="targeting">Targeting</TabsTrigger>
+            <TabsTrigger value="bot-protection" className="flex items-center gap-1.5">
+              <ShieldAlert className="w-3.5 h-3.5" />
+              Bot Protection
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="basics" className="space-y-6">
@@ -906,6 +946,194 @@ export default function CampaignEdit() {
             <Button onClick={handleSaveRules} disabled={isSaving}>
               {updateRules.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
               Save Targeting Rules
+            </Button>
+          </TabsContent>
+
+          {/* Bot Protection Tab */}
+          <TabsContent value="bot-protection" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bot className="w-5 h-5" />
+                  Bot Action
+                </CardTitle>
+                <CardDescription>
+                  Choose what happens when a bot is detected above the threshold score
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Select value={botAction} onValueChange={(v) => setBotAction(v as BotAction)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select action" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="flag_only">
+                      <div className="flex flex-col">
+                        <span className="font-medium">Flag Only (Recommended)</span>
+                        <span className="text-xs text-muted-foreground">Mark as bot but allow redirect - safest option</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="soft_block">
+                      <div className="flex flex-col">
+                        <span className="font-medium">Soft Block</span>
+                        <span className="text-xs text-muted-foreground">Delay redirect and show warning - gives humans a chance</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="redirect_honeypot">
+                      <div className="flex flex-col">
+                        <span className="font-medium">Redirect to Honeypot</span>
+                        <span className="text-xs text-muted-foreground">Send bots to a fake page</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="block">
+                      <div className="flex flex-col">
+                        <span className="font-medium">Block</span>
+                        <span className="text-xs text-muted-foreground">Don't redirect at all - may block real users</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {botAction === 'redirect_honeypot' && (
+                  <div className="space-y-2">
+                    <Label>Honeypot URL</Label>
+                    <Input
+                      value={honeypotUrl}
+                      onChange={(e) => setHoneypotUrl(e.target.value)}
+                      placeholder="https://example.com/fake-landing-page"
+                      type="url"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Bots will be redirected to this URL instead of the real destination
+                    </p>
+                  </div>
+                )}
+
+                {botAction === 'soft_block' && (
+                  <div className="space-y-2">
+                    <Label>Delay Time (ms)</Label>
+                    <div className="flex items-center gap-4">
+                      <Slider
+                        value={[botSoftBlockDelay]}
+                        onValueChange={([v]) => setBotSoftBlockDelay(v)}
+                        min={1000}
+                        max={10000}
+                        step={500}
+                        className="flex-1"
+                      />
+                      <span className="text-sm font-mono w-16">{botSoftBlockDelay}ms</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Delay before redirect - real users will wait, bots may timeout
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Bot Threshold Score</CardTitle>
+                <CardDescription>
+                  Sessions with bot score at or above this threshold will trigger the selected action.
+                  Higher threshold = fewer false positives but may miss some bots.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <Slider
+                    value={[botThreshold]}
+                    onValueChange={([v]) => setBotThreshold(v)}
+                    min={0}
+                    max={100}
+                    step={5}
+                    className="flex-1"
+                  />
+                  <span className="text-lg font-mono w-12">{botThreshold}</span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>0 - Very sensitive (blocks more)</span>
+                  <span>100 - Only obvious bots</span>
+                </div>
+                <div className={`p-3 rounded-lg border ${
+                  botThreshold < 40 
+                    ? 'bg-destructive/10 border-destructive/30 text-destructive' 
+                    : botThreshold < 70 
+                    ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-700 dark:text-yellow-400' 
+                    : 'bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-400'
+                }`}>
+                  {botThreshold < 40 && (
+                    <p className="text-sm">⚠️ Very low threshold - high risk of blocking real users</p>
+                  )}
+                  {botThreshold >= 40 && botThreshold < 70 && (
+                    <p className="text-sm">⚡ Moderate threshold - may occasionally affect real users</p>
+                  )}
+                  {botThreshold >= 70 && (
+                    <p className="text-sm">✅ Safe threshold - only catches obvious bots</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Whitelist</CardTitle>
+                <CardDescription>
+                  IPs and User-Agents that should never be flagged as bots (e.g., office IPs, partner tools)
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>IP Whitelist</Label>
+                  <Textarea
+                    value={botWhitelistIps}
+                    onChange={(e) => setBotWhitelistIps(e.target.value)}
+                    placeholder="1.2.3.4&#10;5.6.7.8"
+                    rows={3}
+                  />
+                  <p className="text-xs text-muted-foreground">One IP per line</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>User-Agent Whitelist (patterns)</Label>
+                  <Textarea
+                    value={botWhitelistUas}
+                    onChange={(e) => setBotWhitelistUas(e.target.value)}
+                    placeholder="MyMonitoringTool&#10;PartnerBot"
+                    rows={3}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    One pattern per line - UAs containing this text will be allowed
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Advanced Options</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label>Challenge Mode</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Show a JavaScript challenge instead of immediately blocking
+                    </p>
+                  </div>
+                  <Switch 
+                    checked={botChallengeEnabled} 
+                    onCheckedChange={setBotChallengeEnabled} 
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, suspected bots will be shown a simple challenge that real browsers can pass automatically
+                </p>
+              </CardContent>
+            </Card>
+
+            <Button onClick={handleSaveBotProtection} disabled={isSaving}>
+              {updateCampaign.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              Save Bot Protection
             </Button>
           </TabsContent>
         </Tabs>

@@ -24,6 +24,8 @@ export interface Project {
   updated_at: string;
 }
 
+export type BotAction = 'flag_only' | 'soft_block' | 'redirect_honeypot' | 'block';
+
 export interface Campaign {
   id: string;
   project_id: string;
@@ -36,6 +38,14 @@ export interface Campaign {
   priority: number;
   created_at: string;
   updated_at: string;
+  // Bot protection settings
+  bot_action?: BotAction;
+  bot_threshold?: number;
+  honeypot_url?: string | null;
+  bot_whitelist_ips?: string[];
+  bot_whitelist_uas?: string[];
+  bot_challenge_enabled?: boolean;
+  bot_soft_block_delay_ms?: number;
 }
 
 export interface CampaignRule {
@@ -97,6 +107,38 @@ export interface Session {
   gclid: string | null;
   fbclid: string | null;
   is_bounced: boolean;
+  // Bot detection
+  bot_score?: number;
+  bot_signals?: BotSignals;
+  is_bot_suspected?: boolean;
+}
+
+export interface BotSignals {
+  webdriver?: boolean;
+  noPlugins?: boolean;
+  knownBotUA?: boolean;
+  suspiciousUA?: boolean;
+  rateLimitExceeded?: boolean;
+  missingHeaders?: boolean;
+  datacenterIP?: boolean;
+  automationProps?: boolean;
+}
+
+export interface BotReviewItem {
+  id: string;
+  session_id: string | null;
+  campaign_id: string | null;
+  project_id: string;
+  visitor_key_hash: string | null;
+  ip_hash: string | null;
+  user_agent: string | null;
+  bot_score: number | null;
+  bot_signals: BotSignals | null;
+  review_status: 'pending' | 'approved' | 'rejected';
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  notes: string | null;
+  created_at: string;
 }
 
 export interface EventRaw {

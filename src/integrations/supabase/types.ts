@@ -180,6 +180,79 @@ export type Database = {
           },
         ]
       }
+      bot_review_queue: {
+        Row: {
+          bot_score: number | null
+          bot_signals: Json | null
+          campaign_id: string | null
+          created_at: string | null
+          id: string
+          ip_hash: string | null
+          notes: string | null
+          project_id: string
+          review_status: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          session_id: string | null
+          user_agent: string | null
+          visitor_key_hash: string | null
+        }
+        Insert: {
+          bot_score?: number | null
+          bot_signals?: Json | null
+          campaign_id?: string | null
+          created_at?: string | null
+          id?: string
+          ip_hash?: string | null
+          notes?: string | null
+          project_id: string
+          review_status?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          session_id?: string | null
+          user_agent?: string | null
+          visitor_key_hash?: string | null
+        }
+        Update: {
+          bot_score?: number | null
+          bot_signals?: Json | null
+          campaign_id?: string | null
+          created_at?: string | null
+          id?: string
+          ip_hash?: string | null
+          notes?: string | null
+          project_id?: string
+          review_status?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          session_id?: string | null
+          user_agent?: string | null
+          visitor_key_hash?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_review_queue_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bot_review_queue_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bot_review_queue_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaign_rules: {
         Row: {
           browser_in: string[] | null
@@ -229,8 +302,15 @@ export type Database = {
       }
       campaigns: {
         Row: {
+          bot_action: string | null
+          bot_challenge_enabled: boolean | null
+          bot_soft_block_delay_ms: number | null
+          bot_threshold: number | null
+          bot_whitelist_ips: string[] | null
+          bot_whitelist_uas: string[] | null
           created_at: string
           end_at: string | null
+          honeypot_url: string | null
           id: string
           name: string
           priority: number | null
@@ -242,8 +322,15 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          bot_action?: string | null
+          bot_challenge_enabled?: boolean | null
+          bot_soft_block_delay_ms?: number | null
+          bot_threshold?: number | null
+          bot_whitelist_ips?: string[] | null
+          bot_whitelist_uas?: string[] | null
           created_at?: string
           end_at?: string | null
+          honeypot_url?: string | null
           id?: string
           name: string
           priority?: number | null
@@ -255,8 +342,15 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          bot_action?: string | null
+          bot_challenge_enabled?: boolean | null
+          bot_soft_block_delay_ms?: number | null
+          bot_threshold?: number | null
+          bot_whitelist_ips?: string[] | null
+          bot_whitelist_uas?: string[] | null
           created_at?: string
           end_at?: string | null
+          honeypot_url?: string | null
           id?: string
           name?: string
           priority?: number | null
@@ -436,6 +530,8 @@ export type Database = {
       }
       sessions: {
         Row: {
+          bot_score: number | null
+          bot_signals: Json | null
           browser: string | null
           campaign_id: string | null
           country: string | null
@@ -445,6 +541,7 @@ export type Database = {
           fbclid: string | null
           gclid: string | null
           id: string
+          is_bot_suspected: boolean | null
           is_bounced: boolean | null
           last_activity_at: string | null
           os: string | null
@@ -459,6 +556,8 @@ export type Database = {
           visitor_key_hash: string
         }
         Insert: {
+          bot_score?: number | null
+          bot_signals?: Json | null
           browser?: string | null
           campaign_id?: string | null
           country?: string | null
@@ -468,6 +567,7 @@ export type Database = {
           fbclid?: string | null
           gclid?: string | null
           id?: string
+          is_bot_suspected?: boolean | null
           is_bounced?: boolean | null
           last_activity_at?: string | null
           os?: string | null
@@ -482,6 +582,8 @@ export type Database = {
           visitor_key_hash: string
         }
         Update: {
+          bot_score?: number | null
+          bot_signals?: Json | null
           browser?: string | null
           campaign_id?: string | null
           country?: string | null
@@ -491,6 +593,7 @@ export type Database = {
           fbclid?: string | null
           gclid?: string | null
           id?: string
+          is_bot_suspected?: boolean | null
           is_bounced?: boolean | null
           last_activity_at?: string | null
           os?: string | null
