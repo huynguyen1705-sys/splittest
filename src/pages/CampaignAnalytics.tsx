@@ -1022,6 +1022,7 @@ export default function CampaignAnalytics() {
               byExitPage={analytics?.byExitPage || []}
               trafficSources={analytics?.trafficSources}
               topReferrers={analytics?.topReferrers || []}
+              heatmapData={analytics?.heatmapData || {}}
             />
 
             {/* Existing charts */}

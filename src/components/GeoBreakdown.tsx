@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Globe, MapPin, Building2, Wifi, WifiOff, ShieldAlert, Server, Clock, LogIn, LogOut, Search, Share2, Link2, DollarSign, MousePointerClick } from 'lucide-react';
+import { Globe, MapPin, Building2, Wifi, WifiOff, ShieldAlert, Server, Clock, LogIn, LogOut, Search, Share2, Link2, DollarSign, MousePointerClick, CalendarDays } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { GeoBreakdownItem, ISPBreakdownItem } from '@/types/database';
 
@@ -40,13 +40,15 @@ interface GeoBreakdownProps {
   byExitPage?: PageBreakdownItem[];
   trafficSources?: TrafficSources;
   topReferrers?: ReferrerItem[];
+  heatmapData?: Record<number, Record<number, number>>;
 }
 
 export function GeoBreakdown({ 
   byCity, byRegion, byISP, networkType, proxyUsage, byHour, timezone, 
   byEntryPage = [], byExitPage = [],
   trafficSources = { direct: { sessions: 0, visitors: 0 }, search: { sessions: 0, visitors: 0 }, social: { sessions: 0, visitors: 0 }, referral: { sessions: 0, visitors: 0 }, paid: { sessions: 0, visitors: 0 } },
-  topReferrers = []
+  topReferrers = [],
+  heatmapData = {}
 }: GeoBreakdownProps) {
   const totalNetwork = networkType.mobile + networkType.fixed;
   const mobilePercent = totalNetwork > 0 ? Math.round((networkType.mobile / totalNetwork) * 100) : 0;
@@ -106,6 +108,43 @@ export function GeoBreakdown({
     }
   };
 
+  // Heatmap data preparation
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  
+  // Find max value for color scaling
+  let maxHeatmapValue = 0;
+  Object.values(heatmapData).forEach(hourData => {
+    Object.values(hourData).forEach(count => {
+      if (count > maxHeatmapValue) maxHeatmapValue = count;
+    });
+  });
+
+  const getHeatmapColor = (value: number) => {
+    if (value === 0 || maxHeatmapValue === 0) return 'bg-muted/30';
+    const intensity = value / maxHeatmapValue;
+    if (intensity > 0.8) return 'bg-primary';
+    if (intensity > 0.6) return 'bg-primary/80';
+    if (intensity > 0.4) return 'bg-primary/60';
+    if (intensity > 0.2) return 'bg-primary/40';
+    return 'bg-primary/20';
+  };
+
+  const hasHeatmapData = Object.keys(heatmapData).length > 0;
+
+  // Find best times to advertise (top 5 hour+day combinations)
+  const bestTimes: Array<{ day: string; hour: string; sessions: number }> = [];
+  Object.entries(heatmapData).forEach(([day, hourData]) => {
+    Object.entries(hourData).forEach(([hour, count]) => {
+      bestTimes.push({
+        day: dayNames[parseInt(day)],
+        hour: `${hour.padStart(2, '0')}:00`,
+        sessions: count,
+      });
+    });
+  });
+  bestTimes.sort((a, b) => b.sessions - a.sessions);
+
   return (
     <div className="space-y-6">
       {/* Time of Day Analysis - Full width at top */}
@@ -158,6 +197,99 @@ export function GeoBreakdown({
                 />
               </BarChart>
             </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Traffic Heatmap - Hour x Day of Week */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarDays className="w-5 h-5" />
+            Traffic Heatmap
+          </CardTitle>
+          <CardDescription>
+            Session distribution by day of week and hour {timezone && `(${timezone})`}
+            {bestTimes.length > 0 && (
+              <span className="ml-2">
+                • Best time: <span className="font-medium text-primary">{bestTimes[0]?.day} {bestTimes[0]?.hour}</span>
+              </span>
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!hasHeatmapData ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <CalendarDays className="w-10 h-10 mx-auto mb-2 opacity-30" />
+              <p>No heatmap data yet</p>
+              <p className="text-xs mt-1">Data will appear after traffic across different days</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Heatmap Grid */}
+              <div className="overflow-x-auto">
+                <div className="min-w-[600px]">
+                  {/* Hour labels */}
+                  <div className="flex gap-0.5 mb-1 ml-10">
+                    {hours.filter((_, i) => i % 3 === 0).map(h => (
+                      <div 
+                        key={h} 
+                        className="text-[10px] text-muted-foreground text-center"
+                        style={{ width: '36px' }}
+                      >
+                        {h.toString().padStart(2, '0')}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Day rows */}
+                  {dayNames.map((day, dayIndex) => (
+                    <div key={day} className="flex items-center gap-0.5 mb-0.5">
+                      <div className="w-10 text-xs text-muted-foreground text-right pr-2">{day}</div>
+                      <div className="flex gap-0.5">
+                        {hours.map(hour => {
+                          const count = heatmapData[dayIndex]?.[hour] || 0;
+                          return (
+                            <div
+                              key={`${dayIndex}-${hour}`}
+                              className={`w-3 h-3 rounded-sm transition-colors ${getHeatmapColor(count)}`}
+                              title={`${day} ${hour.toString().padStart(2, '0')}:00 - ${count} sessions`}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Legend */}
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  <span>Less</span>
+                  <div className="flex gap-0.5">
+                    <div className="w-3 h-3 rounded-sm bg-muted/30" />
+                    <div className="w-3 h-3 rounded-sm bg-primary/20" />
+                    <div className="w-3 h-3 rounded-sm bg-primary/40" />
+                    <div className="w-3 h-3 rounded-sm bg-primary/60" />
+                    <div className="w-3 h-3 rounded-sm bg-primary/80" />
+                    <div className="w-3 h-3 rounded-sm bg-primary" />
+                  </div>
+                  <span>More</span>
+                </div>
+                
+                {bestTimes.length >= 3 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-foreground font-medium">Best times:</span>
+                    {bestTimes.slice(0, 3).map((t, i) => (
+                      <Badge key={i} variant="outline" className="text-[10px]">
+                        {t.day} {t.hour}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
