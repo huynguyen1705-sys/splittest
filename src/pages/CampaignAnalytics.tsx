@@ -14,6 +14,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -41,7 +43,8 @@ export default function CampaignAnalytics() {
   const [timeRange, setTimeRange] = useState<TimeRangePreset>('24h');
   const [customRange, setCustomRange] = useState<DateRange | undefined>();
   const [datePickerOpen, setDatePickerOpen] = useState(false);
-  const { data: analytics, isLoading: analyticsLoading } = useAnalytics(campaignId, timeRange, customRange);
+  const [excludeBots, setExcludeBots] = useState(false);
+  const { data: analytics, isLoading: analyticsLoading } = useAnalytics(campaignId, timeRange, customRange, excludeBots);
   const { events: realtimeEvents, newEventCount, lastEventTime, isLive } = useRealtimeEvents(campaignId);
   const { data: botAnalytics, isLoading: botAnalyticsLoading } = useBotAnalytics(campaignId);
   const approveSession = useApproveSession();
@@ -403,6 +406,26 @@ export default function CampaignAnalytics() {
           </div>
 
           <TabsContent value="overview" className="space-y-4 sm:space-y-6">
+            {/* Bot Filter Toggle */}
+            <div className="flex items-center justify-end gap-2">
+              <div className="flex items-center space-x-2 bg-muted/50 px-3 py-1.5 rounded-lg">
+                <Switch
+                  id="exclude-bots"
+                  checked={excludeBots}
+                  onCheckedChange={setExcludeBots}
+                />
+                <Label htmlFor="exclude-bots" className="text-xs sm:text-sm cursor-pointer flex items-center gap-1.5">
+                  <Bot className="w-3.5 h-3.5" />
+                  Exclude Bot Traffic
+                  {excludeBots && botAnalytics?.suspectedBotSessions ? (
+                    <span className="text-muted-foreground">
+                      (-{botAnalytics.suspectedBotSessions})
+                    </span>
+                  ) : null}
+                </Label>
+              </div>
+            </div>
+
             {/* KPI Cards - Updated with Unique Visitors */}
             <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
               {/* Unique Visitors - Primary metric */}
