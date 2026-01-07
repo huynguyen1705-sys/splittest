@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
@@ -25,6 +25,8 @@ import { CampaignStatus } from '@/types/database';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { calculateSignificance, analyticsToVariantStats, VariantStats, SignificanceResult } from '@/lib/statistics';
+import { StatisticalSignificance, MultiVariantSignificanceSummary } from '@/components/StatisticalSignificance';
 
 const COLORS = ['hsl(239, 84%, 67%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(199, 89%, 48%)', 'hsl(280, 68%, 60%)'];
 
@@ -155,11 +157,53 @@ export default function CampaignAnalytics() {
   }
 
   const variantData = campaign.variants?.map((v, i) => ({
+    id: v.id,
     name: v.name,
+    isControl: v.is_control,
     assigns: analytics?.byVariant[v.id]?.assigns || 0,
     redirectsOk: analytics?.byVariant[v.id]?.redirectsOk || 0,
+    redirectsFail: analytics?.byVariant[v.id]?.redirectsFail || 0,
+    uniqueVisitors: analytics?.byVariant[v.id]?.uniqueVisitors || 0,
     color: COLORS[i % COLORS.length],
   })) || [];
+
+  // Calculate statistical significance
+  const significanceData = useMemo(() => {
+    if (!variantData || variantData.length < 2) return null;
+
+    // Find control variant (first one with isControl=true, or first variant)
+    const controlIndex = variantData.findIndex(v => v.isControl);
+    const actualControlIndex = controlIndex >= 0 ? controlIndex : 0;
+    const control = variantData[actualControlIndex];
+
+    if (!control) return null;
+
+    // Convert to VariantStats format
+    const variantStats: VariantStats[] = variantData.map(v => 
+      analyticsToVariantStats(v.id, v.name, {
+        assigns: v.assigns,
+        redirectsOk: v.redirectsOk,
+        redirectsFail: v.redirectsFail,
+        uniqueVisitors: v.uniqueVisitors,
+      })
+    );
+
+    const controlStats = variantStats[actualControlIndex];
+    
+    // Calculate significance for each non-control variant
+    const results = new Map<string, SignificanceResult>();
+    variantStats.forEach((variant, index) => {
+      if (index === actualControlIndex) return;
+      results.set(variant.name, calculateSignificance(controlStats, variant));
+    });
+
+    return {
+      controlStats,
+      variantStats,
+      results,
+      controlName: control.name,
+    };
+  }, [variantData]);
 
   const countryData = Object.entries(analytics?.byCountry || {})
     .sort((a, b) => b[1] - a[1])
@@ -605,38 +649,104 @@ export default function CampaignAnalytics() {
               </CardContent>
             </Card>
 
-            {/* Variants */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Variant Performance</CardTitle>
-              </CardHeader>
-              <CardContent>
+            {/* Variants Performance with Statistical Significance */}
+            <div className="grid gap-4 lg:grid-cols-2">
+              {/* Variant Distribution */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base sm:text-lg">Variant Performance</CardTitle>
+                  <CardDescription>Traffic distribution and conversion rates</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {variantData.map((variant, i) => {
+                      const conversionRate = variant.uniqueVisitors > 0 
+                        ? ((variant.redirectsOk / variant.uniqueVisitors) * 100).toFixed(1) 
+                        : '0.0';
+                      return (
+                        <div key={i} className="space-y-2">
+                          <div className="flex items-center gap-3">
+                            <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: variant.color }} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium truncate">{variant.name}</span>
+                                  {variant.isControl && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5">Control</Badge>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-3 text-sm">
+                                  <span className="text-muted-foreground">
+                                    {variant.assigns.toLocaleString()} assigns
+                                  </span>
+                                  <Badge variant="secondary" className="font-mono">
+                                    {conversionRate}%
+                                  </Badge>
+                                </div>
+                              </div>
+                              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full rounded-full transition-all"
+                                  style={{ 
+                                    width: `${analytics?.totalAssigns ? (variant.assigns / analytics.totalAssigns) * 100 : 0}%`,
+                                    backgroundColor: variant.color,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="ml-6 flex gap-4 text-xs text-muted-foreground">
+                            <span>{variant.uniqueVisitors.toLocaleString()} visitors</span>
+                            <span className="text-success">{variant.redirectsOk.toLocaleString()} OK</span>
+                            {variant.redirectsFail > 0 && (
+                              <span className="text-destructive">{variant.redirectsFail} failed</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Statistical Significance */}
+              {significanceData && significanceData.results.size > 0 ? (
                 <div className="space-y-4">
-                  {variantData.map((variant, i) => (
-                    <div key={i} className="flex items-center gap-4">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: variant.color }} />
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium">{variant.name}</span>
-                          <span className="text-sm text-muted-foreground">
-                            {variant.assigns} assignments
-                          </span>
-                        </div>
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div 
-                            className="h-full rounded-full transition-all"
-                            style={{ 
-                              width: `${analytics?.totalAssigns ? (variant.assigns / analytics.totalAssigns) * 100 : 0}%`,
-                              backgroundColor: variant.color,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                  {/* Summary */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base sm:text-lg">A/B Test Results</CardTitle>
+                      <CardDescription>Statistical analysis of variant performance</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <MultiVariantSignificanceSummary
+                        variants={significanceData.variantStats}
+                        results={significanceData.results}
+                        controlName={significanceData.controlName}
+                      />
+                    </CardContent>
+                  </Card>
+
+                  {/* Detailed view for first non-control variant */}
+                  {significanceData.variantStats.length === 2 && (
+                    <StatisticalSignificance
+                      control={significanceData.controlStats}
+                      treatment={significanceData.variantStats.find(v => v.name !== significanceData.controlName)!}
+                      result={Array.from(significanceData.results.values())[0]}
+                    />
+                  )}
                 </div>
-              </CardContent>
-            </Card>
+              ) : (
+                <Card className="flex items-center justify-center">
+                  <CardContent className="py-12 text-center">
+                    <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-muted-foreground/30" />
+                    <p className="text-muted-foreground">
+                      Need at least 2 variants to calculate statistical significance
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           </TabsContent>
 
           <TabsContent value="realtime" className="space-y-6">
