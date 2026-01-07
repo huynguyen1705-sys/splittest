@@ -79,13 +79,26 @@ Deno.serve(async (req) => {
     const totalEventsDeleted = results.reduce((sum, r) => sum + r.eventsDeleted, 0);
     const totalAggregatesDeleted = results.reduce((sum, r) => sum + r.aggregatesDeleted, 0);
 
-    console.log(`Cleanup complete: ${totalEventsDeleted} events, ${totalAggregatesDeleted} aggregates deleted`);
+    // Cleanup expired geo cache entries
+    const { count: geoCacheDeleted, error: geoCacheError } = await supabase
+      .from('geo_cache')
+      .delete({ count: 'exact' })
+      .lt('expires_at', new Date().toISOString());
+
+    if (geoCacheError) {
+      console.error('Failed to cleanup geo_cache:', geoCacheError);
+    } else {
+      console.log(`Cleaned up ${geoCacheDeleted || 0} expired geo cache entries`);
+    }
+
+    console.log(`Cleanup complete: ${totalEventsDeleted} events, ${totalAggregatesDeleted} aggregates, ${geoCacheDeleted || 0} geo cache entries deleted`);
 
     return new Response(JSON.stringify({
       success: true,
       projectsProcessed: projects.length,
       totalEventsDeleted,
       totalAggregatesDeleted,
+      geoCacheDeleted: geoCacheDeleted || 0,
       details: results,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

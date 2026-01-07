@@ -298,28 +298,102 @@ function matchesRules(
 
 // ============ GEO & IP FUNCTIONS ============
 
-async function getCountryFromIP(ip: string): Promise<string> {
+interface GeoData {
+  country: string;
+  region: string | null;
+  city: string | null;
+  isp: string | null;
+  is_mobile: boolean;
+  is_proxy: boolean;
+}
+
+// Hash IP for geo cache lookup
+async function hashIPForGeo(ip: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(ip + 'geo-salt');
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+}
+
+async function getGeoDataFromIP(ip: string, supabase: any): Promise<GeoData> {
+  const defaultGeo: GeoData = {
+    country: 'US',
+    region: null,
+    city: null,
+    isp: null,
+    is_mobile: false,
+    is_proxy: false,
+  };
+
   try {
     if (ip === '127.0.0.1' || ip === '::1' || ip.startsWith('10.') || ip.startsWith('192.168.') || ip.startsWith('172.')) {
-      return 'US';
+      return defaultGeo;
     }
-    
-    const response = await fetch(`http://ip-api.com/json/${ip}?fields=countryCode`, {
-      signal: AbortSignal.timeout(2000),
-    });
+
+    const ipHash = await hashIPForGeo(ip);
+
+    // Check cache first
+    const { data: cached } = await supabase
+      .from('geo_cache')
+      .select('country, region, city, isp, is_mobile, is_proxy')
+      .eq('ip_hash', ipHash)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+
+    if (cached) {
+      console.log(`GeoIP cache hit: ${cached.city}, ${cached.country}`);
+      return {
+        country: cached.country || 'US',
+        region: cached.region,
+        city: cached.city,
+        isp: cached.isp,
+        is_mobile: cached.is_mobile || false,
+        is_proxy: cached.is_proxy || false,
+      };
+    }
+
+    // Call ip-api.com
+    const response = await fetch(
+      `http://ip-api.com/json/${ip}?fields=status,countryCode,regionName,city,isp,mobile,proxy`,
+      { signal: AbortSignal.timeout(2000) }
+    );
     
     if (response.ok) {
       const data = await response.json();
-      if (data.countryCode) {
-        console.log(`GeoIP: ${ip} -> ${data.countryCode}`);
-        return data.countryCode;
+      if (data.status === 'success') {
+        const geoData: GeoData = {
+          country: data.countryCode || 'US',
+          region: data.regionName || null,
+          city: data.city || null,
+          isp: data.isp || null,
+          is_mobile: data.mobile || false,
+          is_proxy: data.proxy || false,
+        };
+
+        console.log(`GeoIP: ${geoData.city}, ${geoData.region}, ${geoData.country}`);
+
+        // Cache result
+        await supabase.from('geo_cache').upsert({
+          ip_hash: ipHash,
+          country: geoData.country,
+          region: geoData.region,
+          city: geoData.city,
+          isp: geoData.isp,
+          is_mobile: geoData.is_mobile,
+          is_proxy: geoData.is_proxy,
+          cached_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        }, { onConflict: 'ip_hash' });
+
+        return geoData;
       }
     }
   } catch (error) {
     console.warn('GeoIP lookup failed:', error);
   }
   
-  return 'US';
+  return defaultGeo;
 }
 
 function getClientIP(req: Request): string {
@@ -438,14 +512,20 @@ Deno.serve(async (req) => {
     const { device, browser, os } = parseUserAgent(userAgent);
     const referrer = req.headers.get('referer') || '';
     
-    // Get country
-    let country = req.headers.get('cf-ipcountry');
-    if (!country || country === 'XX') {
+    // Get geo data
+    let geoData: GeoData;
+    const cfCountry = req.headers.get('cf-ipcountry');
+    if (cfCountry && cfCountry !== 'XX') {
+      // Use Cloudflare country, fetch rest from cache/API
+      console.log(`CF country: ${cfCountry}, looking up full geo for IP`);
+      geoData = await getGeoDataFromIP(clientIP, supabase);
+      geoData.country = cfCountry; // Prefer CF country
+    } else {
       console.log(`No CF header, looking up IP: ${clientIP}`);
-      country = await getCountryFromIP(clientIP);
+      geoData = await getGeoDataFromIP(clientIP, supabase);
     }
     
-    const context = { country, device, browser, os, lang, path, query: originalQuery };
+    const context = { country: geoData.country, device, browser, os, lang, path, query: originalQuery };
     console.log('Visitor context:', JSON.stringify(context));
 
     // Get active campaigns with bot protection settings
@@ -645,13 +725,18 @@ Deno.serve(async (req) => {
     const selectedVariant = matchedCampaign.variants.find((v: { id: string }) => v.id === selectedVariantId);
     const finalUrl = buildFinalUrl(selectedVariant?.destination_url || '', path, originalQuery);
 
-    // Log assignment event
+    // Log assignment event with geo data
     await supabase.from('events_raw').insert({
       project_id: project.id,
       campaign_id: matchedCampaign.id,
       variant_id: selectedVariantId,
       event_type: 'assign',
-      country,
+      country: geoData.country,
+      city: geoData.city,
+      region: geoData.region,
+      isp: geoData.isp,
+      is_mobile: geoData.is_mobile,
+      is_proxy: geoData.is_proxy,
       device,
       browser,
       os,
@@ -664,7 +749,7 @@ Deno.serve(async (req) => {
       user_agent: userAgent.slice(0, 500),
     });
 
-    // Create/update session with bot detection data
+    // Create/update session with bot detection and geo data
     const isBotSuspected = botDetection.isSuspected || botActionResult.action !== 'allow';
     const fullSessionKey = sessionKey || sessionId;
     
@@ -675,7 +760,12 @@ Deno.serve(async (req) => {
       session_key: fullSessionKey,
       entry_page: path,
       exit_page: path,
-      country,
+      country: geoData.country,
+      city: geoData.city,
+      region: geoData.region,
+      isp: geoData.isp,
+      is_mobile: geoData.is_mobile,
+      is_proxy: geoData.is_proxy,
       device,
       browser,
       os,

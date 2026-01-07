@@ -20,6 +20,7 @@ export type Database = {
           avg_ttr_ms: number | null
           browser: string | null
           campaign_id: string
+          city: string | null
           country: string | null
           device: string | null
           id: string
@@ -29,6 +30,7 @@ export type Database = {
           project_id: string
           redirects_fail: number | null
           redirects_ok: number | null
+          region: string | null
           unique_sessions: number | null
           unique_visitors: number | null
           variant_id: string | null
@@ -38,6 +40,7 @@ export type Database = {
           avg_ttr_ms?: number | null
           browser?: string | null
           campaign_id: string
+          city?: string | null
           country?: string | null
           device?: string | null
           id?: string
@@ -47,6 +50,7 @@ export type Database = {
           project_id: string
           redirects_fail?: number | null
           redirects_ok?: number | null
+          region?: string | null
           unique_sessions?: number | null
           unique_visitors?: number | null
           variant_id?: string | null
@@ -56,6 +60,7 @@ export type Database = {
           avg_ttr_ms?: number | null
           browser?: string | null
           campaign_id?: string
+          city?: string | null
           country?: string | null
           device?: string | null
           id?: string
@@ -65,6 +70,7 @@ export type Database = {
           project_id?: string
           redirects_fail?: number | null
           redirects_ok?: number | null
+          region?: string | null
           unique_sessions?: number | null
           unique_visitors?: number | null
           variant_id?: string | null
@@ -375,68 +381,95 @@ export type Database = {
         Row: {
           browser: string | null
           campaign_id: string | null
+          city: string | null
           country: string | null
           device: string | null
+          district: string | null
           error_message: string | null
           event_type: Database["public"]["Enums"]["event_type"]
           id: string
           ip_hash: string | null
+          is_mobile: boolean | null
+          is_proxy: boolean | null
+          isp: string | null
           lang: string | null
+          lat: number | null
+          lon: number | null
           meta_json: Json | null
           os: string | null
           path: string | null
           project_id: string
           referrer: string | null
+          region: string | null
           session_id: string | null
           time_to_redirect_ms: number | null
           ts: string
           user_agent: string | null
           variant_id: string | null
           visitor_key_hash: string | null
+          zip: string | null
         }
         Insert: {
           browser?: string | null
           campaign_id?: string | null
+          city?: string | null
           country?: string | null
           device?: string | null
+          district?: string | null
           error_message?: string | null
           event_type: Database["public"]["Enums"]["event_type"]
           id?: string
           ip_hash?: string | null
+          is_mobile?: boolean | null
+          is_proxy?: boolean | null
+          isp?: string | null
           lang?: string | null
+          lat?: number | null
+          lon?: number | null
           meta_json?: Json | null
           os?: string | null
           path?: string | null
           project_id: string
           referrer?: string | null
+          region?: string | null
           session_id?: string | null
           time_to_redirect_ms?: number | null
           ts?: string
           user_agent?: string | null
           variant_id?: string | null
           visitor_key_hash?: string | null
+          zip?: string | null
         }
         Update: {
           browser?: string | null
           campaign_id?: string | null
+          city?: string | null
           country?: string | null
           device?: string | null
+          district?: string | null
           error_message?: string | null
           event_type?: Database["public"]["Enums"]["event_type"]
           id?: string
           ip_hash?: string | null
+          is_mobile?: boolean | null
+          is_proxy?: boolean | null
+          isp?: string | null
           lang?: string | null
+          lat?: number | null
+          lon?: number | null
           meta_json?: Json | null
           os?: string | null
           path?: string | null
           project_id?: string
           referrer?: string | null
+          region?: string | null
           session_id?: string | null
           time_to_redirect_ms?: number | null
           ts?: string
           user_agent?: string | null
           variant_id?: string | null
           visitor_key_hash?: string | null
+          zip?: string | null
         }
         Relationships: [
           {
@@ -461,6 +494,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      geo_cache: {
+        Row: {
+          cached_at: string | null
+          city: string | null
+          country: string | null
+          district: string | null
+          expires_at: string | null
+          ip_hash: string
+          is_mobile: boolean | null
+          is_proxy: boolean | null
+          isp: string | null
+          lat: number | null
+          lon: number | null
+          region: string | null
+          zip: string | null
+        }
+        Insert: {
+          cached_at?: string | null
+          city?: string | null
+          country?: string | null
+          district?: string | null
+          expires_at?: string | null
+          ip_hash: string
+          is_mobile?: boolean | null
+          is_proxy?: boolean | null
+          isp?: string | null
+          lat?: number | null
+          lon?: number | null
+          region?: string | null
+          zip?: string | null
+        }
+        Update: {
+          cached_at?: string | null
+          city?: string | null
+          country?: string | null
+          district?: string | null
+          expires_at?: string | null
+          ip_hash?: string
+          is_mobile?: boolean | null
+          is_proxy?: boolean | null
+          isp?: string | null
+          lat?: number | null
+          lon?: number | null
+          region?: string | null
+          zip?: string | null
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -534,6 +615,7 @@ export type Database = {
           bot_signals: Json | null
           browser: string | null
           campaign_id: string | null
+          city: string | null
           country: string | null
           device: string | null
           entry_page: string | null
@@ -543,11 +625,15 @@ export type Database = {
           id: string
           is_bot_suspected: boolean | null
           is_bounced: boolean | null
+          is_mobile: boolean | null
+          is_proxy: boolean | null
+          isp: string | null
           last_activity_at: string | null
           os: string | null
           page_views: number | null
           project_id: string
           referrer: string | null
+          region: string | null
           session_key: string
           started_at: string | null
           utm_campaign: string | null
@@ -560,6 +646,7 @@ export type Database = {
           bot_signals?: Json | null
           browser?: string | null
           campaign_id?: string | null
+          city?: string | null
           country?: string | null
           device?: string | null
           entry_page?: string | null
@@ -569,11 +656,15 @@ export type Database = {
           id?: string
           is_bot_suspected?: boolean | null
           is_bounced?: boolean | null
+          is_mobile?: boolean | null
+          is_proxy?: boolean | null
+          isp?: string | null
           last_activity_at?: string | null
           os?: string | null
           page_views?: number | null
           project_id: string
           referrer?: string | null
+          region?: string | null
           session_key: string
           started_at?: string | null
           utm_campaign?: string | null
@@ -586,6 +677,7 @@ export type Database = {
           bot_signals?: Json | null
           browser?: string | null
           campaign_id?: string | null
+          city?: string | null
           country?: string | null
           device?: string | null
           entry_page?: string | null
@@ -595,11 +687,15 @@ export type Database = {
           id?: string
           is_bot_suspected?: boolean | null
           is_bounced?: boolean | null
+          is_mobile?: boolean | null
+          is_proxy?: boolean | null
+          isp?: string | null
           last_activity_at?: string | null
           os?: string | null
           page_views?: number | null
           project_id?: string
           referrer?: string | null
+          region?: string | null
           session_key?: string
           started_at?: string | null
           utm_campaign?: string | null
