@@ -1018,6 +1018,8 @@ export default function CampaignAnalytics() {
               proxyUsage={analytics?.proxyUsage || { proxy: 0, direct: 0 }}
               byHour={analytics?.byHour || {}}
               timezone={project?.timezone}
+              byEntryPage={analytics?.byEntryPage || []}
+              byExitPage={analytics?.byExitPage || []}
             />
 
             {/* Existing charts */}

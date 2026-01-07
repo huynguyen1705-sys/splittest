@@ -1,11 +1,17 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Globe, MapPin, Building2, Wifi, WifiOff, ShieldAlert, Server, Clock } from 'lucide-react';
+import { Globe, MapPin, Building2, Wifi, WifiOff, ShieldAlert, Server, Clock, LogIn, LogOut } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { GeoBreakdownItem, ISPBreakdownItem } from '@/types/database';
 
 const COLORS = ['hsl(239, 84%, 67%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(199, 89%, 48%)', 'hsl(280, 68%, 60%)'];
+
+interface PageBreakdownItem {
+  path: string;
+  sessions: number;
+  visitors: number;
+}
 
 interface GeoBreakdownProps {
   byCity: GeoBreakdownItem[];
@@ -15,9 +21,11 @@ interface GeoBreakdownProps {
   proxyUsage: { proxy: number; direct: number };
   byHour: Record<number, number>;
   timezone?: string;
+  byEntryPage?: PageBreakdownItem[];
+  byExitPage?: PageBreakdownItem[];
 }
 
-export function GeoBreakdown({ byCity, byRegion, byISP, networkType, proxyUsage, byHour, timezone }: GeoBreakdownProps) {
+export function GeoBreakdown({ byCity, byRegion, byISP, networkType, proxyUsage, byHour, timezone, byEntryPage = [], byExitPage = [] }: GeoBreakdownProps) {
   const totalNetwork = networkType.mobile + networkType.fixed;
   const mobilePercent = totalNetwork > 0 ? Math.round((networkType.mobile / totalNetwork) * 100) : 0;
   const fixedPercent = 100 - mobilePercent;
@@ -370,6 +378,103 @@ export function GeoBreakdown({ byCity, byRegion, byISP, networkType, proxyUsage,
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Entry/Exit Pages Analysis */}
+      {(byEntryPage.length > 0 || byExitPage.length > 0) && (
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Entry Pages */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <LogIn className="w-5 h-5" />
+                Top Entry Pages
+              </CardTitle>
+              <CardDescription>
+                Landing pages where users first arrive
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {byEntryPage.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  <LogIn className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">No entry page data yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {byEntryPage.slice(0, 8).map((item, i) => {
+                    const maxSessions = byEntryPage[0]?.sessions || 1;
+                    const percent = (item.sessions / maxSessions) * 100;
+                    return (
+                      <div key={item.path} className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span className="truncate flex-1 mr-2 font-mono text-xs" title={item.path}>
+                            {item.path || '/'}
+                          </span>
+                          <span className="text-muted-foreground flex-shrink-0 text-xs">
+                            {item.sessions} sessions · {item.visitors} visitors
+                          </span>
+                        </div>
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full rounded-full transition-all bg-primary"
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Exit Pages */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <LogOut className="w-5 h-5" />
+                Top Exit Pages
+              </CardTitle>
+              <CardDescription>
+                Pages where users leave the site
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {byExitPage.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  <LogOut className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">No exit page data yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {byExitPage.slice(0, 8).map((item, i) => {
+                    const maxSessions = byExitPage[0]?.sessions || 1;
+                    const percent = (item.sessions / maxSessions) * 100;
+                    return (
+                      <div key={item.path} className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span className="truncate flex-1 mr-2 font-mono text-xs" title={item.path}>
+                            {item.path || '/'}
+                          </span>
+                          <span className="text-muted-foreground flex-shrink-0 text-xs">
+                            {item.sessions} sessions · {item.visitors} visitors
+                          </span>
+                        </div>
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full rounded-full transition-all"
+                            style={{ width: `${percent}%`, backgroundColor: 'hsl(38, 92%, 50%)' }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );

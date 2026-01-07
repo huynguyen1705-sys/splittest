@@ -65,7 +65,7 @@ export function useAnalytics(
       // Fetch sessions data for unique visitors/sessions, UTM attribution, and geo breakdown
       let sessionsQuery = supabase
         .from('sessions')
-        .select('id, utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer, visitor_key_hash, is_bot_suspected, session_key, city, region, country, isp, is_mobile, is_proxy, started_at')
+        .select('id, utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer, visitor_key_hash, is_bot_suspected, session_key, city, region, country, isp, is_mobile, is_proxy, started_at, entry_page, exit_page')
         .eq('campaign_id', campaignId)
         .gte('started_at', startTime.toISOString())
         .lte('started_at', endTime.toISOString());
@@ -103,6 +103,9 @@ export function useAnalytics(
         proxyUsage: { proxy: 0, direct: 0 },
         // Time of day
         byHour: {},
+        // Entry/Exit pages
+        byEntryPage: [],
+        byExitPage: [],
       };
 
       // Track unique visitors and sessions directly from sessions table (most accurate)
@@ -120,6 +123,8 @@ export function useAnalytics(
       const regionMap: Record<string, { sessions: number; visitors: Set<string>; country: string }> = {};
       const ispMap: Record<string, { sessions: number; isMobile: boolean }> = {};
       const hourMap: Record<number, number> = {}; // hour -> count
+      const entryPageMap: Record<string, { sessions: number; visitors: Set<string> }> = {};
+      const exitPageMap: Record<string, { sessions: number; visitors: Set<string> }> = {};
       let mobileCount = 0;
       let fixedCount = 0;
       let proxyCount = 0;
@@ -178,6 +183,24 @@ export function useAnalytics(
         if (session.started_at) {
           const hour = new Date(session.started_at).getHours();
           hourMap[hour] = (hourMap[hour] || 0) + 1;
+        }
+
+        // Entry page tracking
+        if (session.entry_page) {
+          if (!entryPageMap[session.entry_page]) {
+            entryPageMap[session.entry_page] = { sessions: 0, visitors: new Set() };
+          }
+          entryPageMap[session.entry_page].sessions++;
+          if (visitorHash) entryPageMap[session.entry_page].visitors.add(visitorHash);
+        }
+
+        // Exit page tracking
+        if (session.exit_page) {
+          if (!exitPageMap[session.exit_page]) {
+            exitPageMap[session.exit_page] = { sessions: 0, visitors: new Set() };
+          }
+          exitPageMap[session.exit_page].sessions++;
+          if (visitorHash) exitPageMap[session.exit_page].visitors.add(visitorHash);
         }
         
         // Determine UTM source
@@ -271,6 +294,17 @@ export function useAnalytics(
       analytics.networkType = { mobile: mobileCount, fixed: fixedCount };
       analytics.proxyUsage = { proxy: proxyCount, direct: directCount };
       analytics.byHour = hourMap;
+
+      // Build entry/exit page arrays
+      analytics.byEntryPage = Object.entries(entryPageMap)
+        .map(([path, data]) => ({ path, sessions: data.sessions, visitors: data.visitors.size }))
+        .sort((a, b) => b.sessions - a.sessions)
+        .slice(0, 15);
+
+      analytics.byExitPage = Object.entries(exitPageMap)
+        .map(([path, data]) => ({ path, sessions: data.sessions, visitors: data.visitors.size }))
+        .sort((a, b) => b.sessions - a.sessions)
+        .slice(0, 15);
 
       let totalTTR = 0;
       let ttrCount = 0;

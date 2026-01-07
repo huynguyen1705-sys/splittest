@@ -234,4 +234,7 @@ export interface AnalyticsData {
   proxyUsage: { proxy: number; direct: number };
   // Time of day analysis
   byHour: Record<number, number>; // hour (0-23) -> session count
+  // Entry/Exit pages analysis
+  byEntryPage: Array<{ path: string; sessions: number; visitors: number }>;
+  byExitPage: Array<{ path: string; sessions: number; visitors: number }>;
 }
