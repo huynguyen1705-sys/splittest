@@ -635,12 +635,21 @@ export default function CampaignAnalytics() {
                         dataKey="ts" 
                         className="text-xs"
                         tick={{ fontSize: 10 }}
-                        tickFormatter={(v) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        tickFormatter={(v) => {
+                          // Handle truncated ISO strings like "2026-01-07T15" or "2026-01-07T15:30"
+                          const dateStr = v.length === 13 ? `${v}:00:00` : v.length === 16 ? `${v}:00` : v;
+                          const date = new Date(dateStr);
+                          return isNaN(date.getTime()) ? v : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        }}
                       />
                       <YAxis className="text-xs" tick={{ fontSize: 10 }} width={35} />
                       <Tooltip 
                         contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 12 }}
-                        labelFormatter={(v) => new Date(v).toLocaleString()}
+                        labelFormatter={(v) => {
+                          const dateStr = v.length === 13 ? `${v}:00:00` : v.length === 16 ? `${v}:00` : v;
+                          const date = new Date(dateStr);
+                          return isNaN(date.getTime()) ? v : date.toLocaleString();
+                        }}
                       />
                       <Line type="monotone" dataKey="assigns" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} name="Assignments" />
                       <Line type="monotone" dataKey="redirectsOk" stroke="hsl(var(--success))" strokeWidth={2} dot={false} name="Redirects" />
