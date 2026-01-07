@@ -313,30 +313,105 @@ export default function CampaignAnalytics() {
         </div>
 
         <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
+          {/* Time Range Selector - moved to top for mobile */}
+          <div className="flex items-center gap-2 sm:hidden">
+            <Select 
+              value={timeRange} 
+              onValueChange={(v) => {
+                setTimeRange(v as TimeRangePreset);
+                if (v !== 'custom') {
+                  setCustomRange(undefined);
+                }
+              }}
+            >
+              <SelectTrigger className="flex-1 h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1h">Last Hour</SelectItem>
+                <SelectItem value="24h">Last 24h</SelectItem>
+                <SelectItem value="7d">Last 7 Days</SelectItem>
+                <SelectItem value="30d">Last 30 Days</SelectItem>
+                <SelectItem value="custom">Custom Range</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {timeRange === 'custom' && (
+              <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "h-8 text-xs justify-start text-left font-normal",
+                      !customRange && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
+                    {customRange?.from ? (
+                      customRange.to ? (
+                        <>
+                          {format(customRange.from, "MMM d")} - {format(customRange.to, "MMM d")}
+                        </>
+                      ) : (
+                        format(customRange.from, "MMM d")
+                      )
+                    ) : (
+                      <span>Pick dates</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                    mode="range"
+                    defaultMonth={customRange?.from}
+                    selected={customRange ? { from: customRange.from, to: customRange.to } : undefined}
+                    onSelect={(range) => {
+                      if (range?.from && range?.to) {
+                        setCustomRange({ from: range.from, to: range.to });
+                        setDatePickerOpen(false);
+                      } else if (range?.from) {
+                        setCustomRange({ from: range.from, to: range.from });
+                      }
+                    }}
+                    numberOfMonths={1}
+                    disabled={(date) => date > new Date()}
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
+            )}
+          </div>
+          
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <TabsList className="w-full sm:w-auto">
-              <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
-              <TabsTrigger value="traffic" className="text-xs sm:text-sm">Traffic Sources</TabsTrigger>
-              <TabsTrigger value="realtime" className="relative text-xs sm:text-sm">
-                Real-Time
-                {newEventCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full text-[10px] text-primary-foreground flex items-center justify-center">
-                    {newEventCount > 9 ? '9+' : newEventCount}
-                  </span>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="breakdown" className="text-xs sm:text-sm">Breakdown</TabsTrigger>
-              <TabsTrigger value="bot-traffic" className="text-xs sm:text-sm flex items-center gap-1">
-                <Bot className="w-3 h-3" />
-                Bot Traffic
-                {(botAnalytics?.suspectedBotSessions || 0) > 0 && (
-                  <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-destructive/20 text-destructive rounded-full">
-                    {botAnalytics?.suspectedBotSessions}
-                  </span>
-                )}
-              </TabsTrigger>
-            </TabsList>
-            <div className="flex items-center gap-2">
+            {/* Scrollable tabs on mobile */}
+            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+              <TabsList className="inline-flex w-max sm:w-auto">
+                <TabsTrigger value="overview" className="text-xs sm:text-sm px-2.5 sm:px-3">Overview</TabsTrigger>
+                <TabsTrigger value="traffic" className="text-xs sm:text-sm px-2.5 sm:px-3">Sources</TabsTrigger>
+                <TabsTrigger value="realtime" className="relative text-xs sm:text-sm px-2.5 sm:px-3">
+                  Real-Time
+                  {newEventCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full text-[10px] text-primary-foreground flex items-center justify-center">
+                      {newEventCount > 9 ? '9+' : newEventCount}
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="breakdown" className="text-xs sm:text-sm px-2.5 sm:px-3">Breakdown</TabsTrigger>
+                <TabsTrigger value="bot-traffic" className="text-xs sm:text-sm flex items-center gap-1 px-2.5 sm:px-3">
+                  <Bot className="w-3 h-3" />
+                  <span className="hidden sm:inline">Bot Traffic</span>
+                  <span className="sm:hidden">Bots</span>
+                  {(botAnalytics?.suspectedBotSessions || 0) > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-destructive/20 text-destructive rounded-full">
+                      {botAnalytics?.suspectedBotSessions}
+                    </span>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+            
+            {/* Desktop time range selector */}
+            <div className="hidden sm:flex items-center gap-2">
               <Select 
                 value={timeRange} 
                 onValueChange={(v) => {
@@ -346,7 +421,7 @@ export default function CampaignAnalytics() {
                   }
                 }}
               >
-                <SelectTrigger className="w-full sm:w-36 h-8 sm:h-9 text-xs sm:text-sm">
+                <SelectTrigger className="w-36 h-9 text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -364,7 +439,7 @@ export default function CampaignAnalytics() {
                     <Button
                       variant="outline"
                       className={cn(
-                        "h-8 sm:h-9 text-xs sm:text-sm justify-start text-left font-normal",
+                        "h-9 text-sm justify-start text-left font-normal",
                         !customRange && "text-muted-foreground"
                       )}
                     >
