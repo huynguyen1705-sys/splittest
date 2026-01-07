@@ -481,8 +481,17 @@ Deno.serve(async (req) => {
     console.log(`UTM params: source=${utmSource}, medium=${utmMedium}, campaign=${utmCampaign}`);
 
     if (!token) {
-      return new Response(JSON.stringify({ error: 'Missing token' }), {
+      return new Response(JSON.stringify({ error: 'Missing token', shouldRedirect: false }), {
         status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Validate token format (48 hex characters)
+    if (!/^[a-f0-9]{48}$/i.test(token)) {
+      console.warn(`Invalid token format: ${token.slice(0, 10)}...`);
+      return new Response(JSON.stringify({ error: 'Invalid token', shouldRedirect: false }), {
+        status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

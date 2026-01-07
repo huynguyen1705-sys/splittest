@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('Cleanup job error:', error);
-    return new Response(JSON.stringify({ error: 'Cleanup failed', details: String(error) }), {
+    return new Response(JSON.stringify({ error: 'An error occurred' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
