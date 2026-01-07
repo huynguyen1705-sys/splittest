@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
 import { useCampaign, useUpdateCampaign } from '@/hooks/useCampaigns';
 import { useAnalytics, useRealtimeEvents, TimeRangePreset, DateRange } from '@/hooks/useAnalytics';
+import { useProject } from '@/hooks/useProjects';
 import { useBotAnalytics, useApproveSession, useRejectSession, FlaggedSession } from '@/hooks/useBotAnalytics';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
@@ -40,6 +41,7 @@ const statusVariantMap: Record<CampaignStatus, 'draft' | 'active' | 'paused' | '
 export default function CampaignAnalytics() {
   const { id: projectId, campaignId } = useParams<{ id: string; campaignId: string }>();
   const { user, loading: authLoading } = useAuth();
+  const { data: project } = useProject(projectId);
   const { data: campaign, isLoading } = useCampaign(campaignId);
   const updateCampaign = useUpdateCampaign();
   const [timeRange, setTimeRange] = useState<TimeRangePreset>('24h');
@@ -54,6 +56,22 @@ export default function CampaignAnalytics() {
   const navigate = useNavigate();
   const [isSendingTestEvent, setIsSendingTestEvent] = useState(false);
   const [testEventType, setTestEventType] = useState<'assign' | 'redirect_ok' | 'redirect_fail'>('assign');
+
+  // Helper function to format date with project timezone
+  const formatDateWithTimezone = (dateStr: string, options: Intl.DateTimeFormatOptions = {}) => {
+    // Handle truncated ISO strings like "2026-01-07T15" or "2026-01-07T15:30"
+    const fullDateStr = dateStr.length === 13 ? `${dateStr}:00:00` : dateStr.length === 16 ? `${dateStr}:00` : dateStr;
+    const date = new Date(fullDateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    
+    const timezone = project?.timezone || 'UTC';
+    try {
+      return date.toLocaleString([], { ...options, timeZone: timezone });
+    } catch {
+      // Fallback if timezone is invalid
+      return date.toLocaleString([], options);
+    }
+  };
 
   // Move useMemo hooks before any early returns to ensure consistent hook order
   const variantData = useMemo(() => {
@@ -635,21 +653,12 @@ export default function CampaignAnalytics() {
                         dataKey="ts" 
                         className="text-xs"
                         tick={{ fontSize: 10 }}
-                        tickFormatter={(v) => {
-                          // Handle truncated ISO strings like "2026-01-07T15" or "2026-01-07T15:30"
-                          const dateStr = v.length === 13 ? `${v}:00:00` : v.length === 16 ? `${v}:00` : v;
-                          const date = new Date(dateStr);
-                          return isNaN(date.getTime()) ? v : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                        }}
+                        tickFormatter={(v) => formatDateWithTimezone(v, { hour: '2-digit', minute: '2-digit' })}
                       />
                       <YAxis className="text-xs" tick={{ fontSize: 10 }} width={35} />
                       <Tooltip 
                         contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 12 }}
-                        labelFormatter={(v) => {
-                          const dateStr = v.length === 13 ? `${v}:00:00` : v.length === 16 ? `${v}:00` : v;
-                          const date = new Date(dateStr);
-                          return isNaN(date.getTime()) ? v : date.toLocaleString();
-                        }}
+                        labelFormatter={(v) => formatDateWithTimezone(v, { dateStyle: 'medium', timeStyle: 'short' })}
                       />
                       <Line type="monotone" dataKey="assigns" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} name="Assignments" />
                       <Line type="monotone" dataKey="redirectsOk" stroke="hsl(var(--success))" strokeWidth={2} dot={false} name="Redirects" />
@@ -1206,23 +1215,13 @@ export default function CampaignAnalytics() {
                             dataKey="ts" 
                             className="text-xs"
                             tick={{ fontSize: 10 }}
-                            tickFormatter={(v) => {
-                              const dateStr = v.length === 13 ? `${v}:00:00` : v.length === 16 ? `${v}:00` : v;
-                              const date = new Date(dateStr);
-                              if (isNaN(date.getTime())) return v;
-                              return date.toLocaleDateString([], { weekday: 'short' }) + ' ' + 
-                                     date.toLocaleTimeString([], { hour: '2-digit' });
-                            }}
+                            tickFormatter={(v) => formatDateWithTimezone(v, { weekday: 'short', hour: '2-digit' })}
                             interval="preserveStartEnd"
                           />
                           <YAxis className="text-xs" tick={{ fontSize: 10 }} width={35} />
                           <Tooltip 
                             contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 12 }}
-                            labelFormatter={(v) => {
-                              const dateStr = v.length === 13 ? `${v}:00:00` : v.length === 16 ? `${v}:00` : v;
-                              const date = new Date(dateStr);
-                              return isNaN(date.getTime()) ? v : date.toLocaleString();
-                            }}
+                            labelFormatter={(v) => formatDateWithTimezone(v, { dateStyle: 'medium', timeStyle: 'short' })}
                           />
                           <Line 
                             type="monotone" 
