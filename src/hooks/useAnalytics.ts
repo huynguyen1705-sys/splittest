@@ -13,12 +13,13 @@ export interface DateRange {
 export function useAnalytics(
   campaignId: string | undefined, 
   timeRange: TimeRangePreset = '24h',
-  customRange?: DateRange
+  customRange?: DateRange,
+  excludeBots: boolean = false
 ) {
   const queryClient = useQueryClient();
   
   return useQuery({
-    queryKey: ['analytics', campaignId, timeRange, customRange?.from?.toISOString(), customRange?.to?.toISOString()],
+    queryKey: ['analytics', campaignId, timeRange, customRange?.from?.toISOString(), customRange?.to?.toISOString(), excludeBots],
     queryFn: async (): Promise<AnalyticsData> => {
       if (!campaignId) throw new Error('Campaign ID required');
 
@@ -62,11 +63,17 @@ export function useAnalytics(
         .gte('ts', fiveMinutesAgo.toISOString());
 
       // Fetch UTM data directly from sessions table using campaign_id (including visitor_key_hash for unique counting)
-      const { data: sessionsData } = await supabase
+      let sessionsQuery = supabase
         .from('sessions')
-        .select('utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer, visitor_key_hash')
+        .select('utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer, visitor_key_hash, is_bot_suspected')
         .eq('campaign_id', campaignId)
         .gte('started_at', startTime.toISOString());
+      
+      if (excludeBots) {
+        sessionsQuery = sessionsQuery.or('is_bot_suspected.is.null,is_bot_suspected.eq.false');
+      }
+      
+      const { data: sessionsData } = await sessionsQuery;
 
       const analytics: AnalyticsData = {
         totalAssigns: 0,
