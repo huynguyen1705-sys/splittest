@@ -62,12 +62,13 @@ export function useAnalytics(
         .eq('campaign_id', campaignId)
         .gte('ts', fiveMinutesAgo.toISOString());
 
-      // Fetch UTM data directly from sessions table using campaign_id (including visitor_key_hash for unique counting)
+      // Fetch sessions data for unique visitors/sessions and UTM attribution
       let sessionsQuery = supabase
         .from('sessions')
-        .select('utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer, visitor_key_hash, is_bot_suspected')
+        .select('id, utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer, visitor_key_hash, is_bot_suspected, session_key')
         .eq('campaign_id', campaignId)
-        .gte('started_at', startTime.toISOString());
+        .gte('started_at', startTime.toISOString())
+        .lte('started_at', endTime.toISOString());
       
       if (excludeBots) {
         sessionsQuery = sessionsQuery.or('is_bot_suspected.is.null,is_bot_suspected.eq.false');
@@ -96,15 +97,24 @@ export function useAnalytics(
         timeSeries: [],
       };
 
+      // Track unique visitors and sessions directly from sessions table (most accurate)
+      const globalVisitorHashes = new Set<string>();
+      const globalSessionKeys = new Set<string>();
+      
       // Track unique visitors per UTM dimension
       const utmSourceVisitors: Record<string, Set<string>> = {};
       const utmMediumVisitors: Record<string, Set<string>> = {};
       const utmCampaignVisitors: Record<string, Set<string>> = {};
       const referrerVisitors: Record<string, Set<string>> = {};
 
-      // Process UTM data from sessions
+      // Process sessions data - calculate global unique visitors/sessions AND UTM attribution
       (sessionsData || []).forEach((session) => {
         const visitorHash = session.visitor_key_hash || '';
+        const sessionKey = session.session_key || session.id;
+        
+        // Track global unique visitors and sessions
+        if (visitorHash) globalVisitorHashes.add(visitorHash);
+        if (sessionKey) globalSessionKeys.add(sessionKey);
         
         // Determine UTM source
         let source = session.utm_source;
@@ -153,6 +163,10 @@ export function useAnalytics(
           if (visitorHash) referrerVisitors[domain].add(visitorHash);
         }
       });
+      
+      // Set global unique counts from sessions table (most accurate source of truth)
+      analytics.uniqueVisitors = globalVisitorHashes.size;
+      analytics.uniqueSessions = globalSessionKeys.size;
 
       // Calculate unique visitors counts
       Object.keys(utmSourceVisitors).forEach(key => {
@@ -172,10 +186,6 @@ export function useAnalytics(
       let ttrCount = 0;
       const timeSeriesMap = new Map<string, { assigns: number; redirectsOk: number; uniqueVisitors: number }>();
       const processedMinutes = new Set<string>();
-      
-      // Track unique visitors and sessions across all data
-      const allVisitorHashes = new Set<string>();
-      const allSessionIds = new Set<string>();
 
       // Process aggregates (exclude last 5 minutes to avoid double counting)
       (aggregates || []).forEach((agg) => {
@@ -187,14 +197,10 @@ export function useAnalytics(
         
         processedMinutes.add(aggMinute);
         
-        // Sum up totals
+        // Sum up totals (event counts, NOT unique counts - those come from sessions table)
         analytics.totalAssigns += agg.assigns || 0;
         analytics.totalRedirectsOk += agg.redirects_ok || 0;
         analytics.totalRedirectsFail += agg.redirects_fail || 0;
-        
-        // Sum unique metrics from aggregates
-        analytics.uniqueVisitors += agg.unique_visitors || 0;
-        analytics.uniqueSessions += agg.unique_sessions || 0;
 
         // Track TTR for weighted average
         if (agg.avg_ttr_ms && agg.redirects_ok) {
@@ -245,16 +251,8 @@ export function useAnalytics(
         ts.uniqueVisitors += agg.unique_visitors || 0;
       });
 
-      // Process recent raw events (for real-time display)
+      // Process recent raw events (for real-time display - event counts only, unique counts already from sessions)
       (recentEvents || []).forEach((event) => {
-        // Track unique visitors/sessions from recent events
-        if (event.visitor_key_hash) {
-          allVisitorHashes.add(event.visitor_key_hash);
-        }
-        if (event.session_id) {
-          allSessionIds.add(event.session_id);
-        }
-
         switch (event.event_type) {
           case 'assign':
             analytics.totalAssigns += 1;
@@ -306,10 +304,6 @@ export function useAnalytics(
         if (event.event_type === 'assign') ts.assigns += 1;
         if (event.event_type === 'redirect_ok') ts.redirectsOk += 1;
       });
-
-      // Add recent unique visitors/sessions to totals
-      analytics.uniqueVisitors += allVisitorHashes.size;
-      analytics.uniqueSessions += allSessionIds.size;
 
       // Calculate redirect success rate
       const totalRedirects = analytics.totalRedirectsOk + analytics.totalRedirectsFail;
