@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ArrowLeft, ArrowRight, Plus, Trash2, Globe, Monitor, Chrome, Smartphone, Languages, Link2 } from 'lucide-react';
 import { COUNTRIES, DEVICES, BROWSERS, OPERATING_SYSTEMS, LANGUAGES } from '@/lib/constants';
 import { toast } from 'sonner';
+import { isValidHttpUrl } from '@/lib/utils';
 
 type Step = 'basics' | 'variants' | 'targeting' | 'review';
 
@@ -98,6 +99,13 @@ export default function CampaignCreate() {
 
     if (variants.some(v => !v.destination_url.trim())) {
       toast.error('All variants must have a destination URL');
+      return;
+    }
+
+    // Validate all destination URLs use http/https
+    const invalidUrlVariant = variants.find(v => !isValidHttpUrl(v.destination_url));
+    if (invalidUrlVariant) {
+      toast.error(`Invalid URL for "${invalidUrlVariant.name}": Only http/https URLs are allowed`);
       return;
     }
 

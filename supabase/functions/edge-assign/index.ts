@@ -419,10 +419,30 @@ async function generateSessionId(visitorKeyHash: string): Promise<string> {
   return await hashString(visitorKeyHash + windowKey);
 }
 
+/**
+ * Validates that a URL uses only safe schemes (http/https)
+ * Returns true if valid, false otherwise
+ */
+function isValidHttpUrl(urlString: string): boolean {
+  if (!urlString || !urlString.trim()) return false;
+  try {
+    const url = new URL(urlString);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 function buildFinalUrl(destinationUrl: string, path: string, originalQuery: string): string {
   let finalUrl = destinationUrl;
   
   if (!finalUrl) return '';
+  
+  // Validate URL scheme before processing
+  if (!isValidHttpUrl(finalUrl.replace('/*', ''))) {
+    console.warn(`Invalid destination URL scheme: ${finalUrl.slice(0, 50)}`);
+    return '';
+  }
   
   try {
     if (finalUrl.includes('/*')) {
@@ -617,6 +637,18 @@ Deno.serve(async (req) => {
     }
 
     if (botActionResult.action === 'honeypot' && botActionResult.url) {
+      // Validate honeypot URL scheme before redirecting
+      if (!isValidHttpUrl(botActionResult.url)) {
+        console.warn(`Invalid honeypot URL scheme: ${botActionResult.url.slice(0, 50)}`);
+        return new Response(JSON.stringify({ 
+          shouldRedirect: false, 
+          error: 'Invalid honeypot configuration',
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
       console.log(`Redirecting bot to honeypot: ${botActionResult.url}`);
       return new Response(JSON.stringify({ 
         shouldRedirect: true, 
