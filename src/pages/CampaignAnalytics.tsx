@@ -4,9 +4,11 @@ import { format } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
 import { useCampaign, useUpdateCampaign } from '@/hooks/useCampaigns';
 import { useAnalytics, useRealtimeEvents, TimeRangePreset, DateRange } from '@/hooks/useAnalytics';
-import { useBotAnalytics } from '@/hooks/useBotAnalytics';
+import { useBotAnalytics, useApproveSession, useRejectSession, FlaggedSession } from '@/hooks/useBotAnalytics';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ArrowLeft, Play, Pause, Activity, Users, CheckCircle, XCircle, Clock, Globe, Monitor, Chrome, Settings, Wifi, WifiOff, RefreshCw, Zap, TrendingUp, Percent, Share2, Link2, Megaphone, CalendarIcon, Bot, ShieldAlert, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Activity, Users, CheckCircle, XCircle, Clock, Globe, Monitor, Chrome, Settings, Wifi, WifiOff, RefreshCw, Zap, TrendingUp, Percent, Share2, Link2, Megaphone, CalendarIcon, Bot, ShieldAlert, AlertTriangle, MoreHorizontal, UserCheck, ShieldX, ShieldPlus } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { CampaignStatus } from '@/types/database';
 import { supabase } from '@/integrations/supabase/client';
@@ -42,6 +44,8 @@ export default function CampaignAnalytics() {
   const { data: analytics, isLoading: analyticsLoading } = useAnalytics(campaignId, timeRange, customRange);
   const { events: realtimeEvents, newEventCount, lastEventTime, isLive } = useRealtimeEvents(campaignId);
   const { data: botAnalytics, isLoading: botAnalyticsLoading } = useBotAnalytics(campaignId);
+  const approveSession = useApproveSession();
+  const rejectSession = useRejectSession();
   const navigate = useNavigate();
   const [isSendingTestEvent, setIsSendingTestEvent] = useState(false);
   const [testEventType, setTestEventType] = useState<'assign' | 'redirect_ok' | 'redirect_fail'>('assign');
@@ -1048,18 +1052,22 @@ export default function CampaignAnalytics() {
                           <TableHeader>
                             <TableRow>
                               <TableHead>Score</TableHead>
+                              <TableHead>Status</TableHead>
                               <TableHead>Visitor</TableHead>
                               <TableHead>Country</TableHead>
                               <TableHead>Device</TableHead>
-                              <TableHead>Browser</TableHead>
                               <TableHead>Signals</TableHead>
                               <TableHead>Entry Page</TableHead>
                               <TableHead>Time</TableHead>
+                              <TableHead className="w-10">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {botAnalytics?.flaggedSessions?.map((session) => (
-                              <TableRow key={session.id}>
+                              <TableRow key={session.id} className={cn(
+                                session.review_status === 'approved' && 'bg-green-500/5',
+                                session.review_status === 'rejected' && 'bg-destructive/5'
+                              )}>
                                 <TableCell>
                                   <div className={cn(
                                     "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium",
@@ -1072,12 +1080,28 @@ export default function CampaignAnalytics() {
                                     {session.bot_score}
                                   </div>
                                 </TableCell>
+                                <TableCell>
+                                  {session.review_status === 'approved' ? (
+                                    <Badge variant="outline" className="bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30">
+                                      <UserCheck className="w-3 h-3 mr-1" />
+                                      Human
+                                    </Badge>
+                                  ) : session.review_status === 'rejected' ? (
+                                    <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">
+                                      <Bot className="w-3 h-3 mr-1" />
+                                      Bot
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-muted-foreground">
+                                      Pending
+                                    </Badge>
+                                  )}
+                                </TableCell>
                                 <TableCell className="font-mono text-xs">
                                   {session.visitor_key_hash}
                                 </TableCell>
                                 <TableCell>{session.country || '-'}</TableCell>
                                 <TableCell className="capitalize">{session.device || '-'}</TableCell>
-                                <TableCell className="capitalize">{session.browser || '-'}</TableCell>
                                 <TableCell>
                                   <div className="flex flex-wrap gap-1">
                                     {session.bot_signals && Object.entries(session.bot_signals)
@@ -1096,6 +1120,62 @@ export default function CampaignAnalytics() {
                                 </TableCell>
                                 <TableCell className="text-xs text-muted-foreground">
                                   {new Date(session.created_at).toLocaleString()}
+                                </TableCell>
+                                <TableCell>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8"
+                                        disabled={approveSession.isPending || rejectSession.isPending}
+                                      >
+                                        <MoreHorizontal className="w-4 h-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem
+                                        onClick={() => approveSession.mutate({
+                                          sessionId: session.session_id,
+                                          campaignId: campaignId!,
+                                          projectId: projectId!,
+                                          visitorKeyHash: session.full_visitor_key_hash,
+                                        })}
+                                        className="text-green-600"
+                                      >
+                                        <UserCheck className="w-4 h-4 mr-2" />
+                                        Approve as Human
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => approveSession.mutate({
+                                          sessionId: session.session_id,
+                                          campaignId: campaignId!,
+                                          projectId: projectId!,
+                                          visitorKeyHash: session.full_visitor_key_hash,
+                                          addToWhitelist: true,
+                                          whitelistType: 'ua',
+                                          whitelistValue: session.browser || '',
+                                        })}
+                                        className="text-green-600"
+                                      >
+                                        <ShieldPlus className="w-4 h-4 mr-2" />
+                                        Approve + Whitelist Browser
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() => rejectSession.mutate({
+                                          sessionId: session.session_id,
+                                          campaignId: campaignId!,
+                                          projectId: projectId!,
+                                          visitorKeyHash: session.full_visitor_key_hash,
+                                        })}
+                                        className="text-destructive"
+                                      >
+                                        <ShieldX className="w-4 h-4 mr-2" />
+                                        Confirm as Bot
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 </TableCell>
                               </TableRow>
                             ))}

@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { BotSignals, BotReviewItem } from '@/types/database';
+import { toast } from '@/hooks/use-toast';
 
 export interface BotAnalyticsData {
   totalSessions: number;
@@ -15,7 +16,9 @@ export interface BotAnalyticsData {
 
 export interface FlaggedSession {
   id: string;
+  session_id: string;
   visitor_key_hash: string;
+  full_visitor_key_hash: string;
   bot_score: number;
   bot_signals: BotSignals | null;
   country: string | null;
@@ -24,6 +27,7 @@ export interface FlaggedSession {
   created_at: string;
   entry_page: string | null;
   user_agent?: string;
+  review_status?: 'pending' | 'approved' | 'rejected' | null;
 }
 
 const SIGNAL_LABELS: Record<string, string> = {
@@ -102,13 +106,26 @@ export function useBotAnalytics(campaignId: string | undefined) {
         .sort((a, b) => b.count - a.count);
 
       // Flagged sessions (top 50 with highest scores)
+      // Also fetch review status from bot_review_queue
+      const { data: reviewQueue } = await supabase
+        .from('bot_review_queue')
+        .select('session_id, review_status')
+        .eq('campaign_id', campaignId);
+
+      const reviewStatusMap = new Map<string, string>();
+      (reviewQueue || []).forEach(r => {
+        if (r.session_id) reviewStatusMap.set(r.session_id, r.review_status || 'pending');
+      });
+
       const flaggedSessions: FlaggedSession[] = allSessions
         .filter(s => (s.bot_score || 0) > 0)
         .sort((a, b) => (b.bot_score || 0) - (a.bot_score || 0))
         .slice(0, 50)
         .map(s => ({
           id: s.id,
+          session_id: s.id,
           visitor_key_hash: s.visitor_key_hash?.slice(0, 12) + '...',
+          full_visitor_key_hash: s.visitor_key_hash || '',
           bot_score: s.bot_score || 0,
           bot_signals: s.bot_signals as BotSignals | null,
           country: s.country,
@@ -116,6 +133,7 @@ export function useBotAnalytics(campaignId: string | undefined) {
           browser: s.browser,
           created_at: s.started_at || new Date().toISOString(),
           entry_page: s.entry_page,
+          review_status: reviewStatusMap.get(s.id) as 'pending' | 'approved' | 'rejected' | undefined,
         }));
 
       // Actions taken (from review queue)
@@ -173,5 +191,169 @@ export function useBotReviewQueue(campaignId: string | undefined) {
       return (data || []) as BotReviewItem[];
     },
     enabled: !!campaignId,
+  });
+}
+
+// Mutation to approve a session (mark as human, optionally add to whitelist)
+export function useApproveSession() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      sessionId, 
+      campaignId, 
+      projectId,
+      visitorKeyHash,
+      addToWhitelist,
+      whitelistType,
+      whitelistValue,
+    }: { 
+      sessionId: string; 
+      campaignId: string;
+      projectId: string;
+      visitorKeyHash: string;
+      addToWhitelist?: boolean;
+      whitelistType?: 'ip' | 'ua';
+      whitelistValue?: string;
+    }) => {
+      // Update session to mark as not bot
+      const { error: sessionError } = await supabase
+        .from('sessions')
+        .update({ is_bot_suspected: false })
+        .eq('id', sessionId);
+
+      if (sessionError) throw sessionError;
+
+      // Update or create review queue entry
+      const { data: existingReview } = await supabase
+        .from('bot_review_queue')
+        .select('id')
+        .eq('session_id', sessionId)
+        .maybeSingle();
+
+      if (existingReview) {
+        await supabase
+          .from('bot_review_queue')
+          .update({ 
+            review_status: 'approved', 
+            reviewed_at: new Date().toISOString() 
+          })
+          .eq('id', existingReview.id);
+      } else {
+        await supabase
+          .from('bot_review_queue')
+          .insert({
+            session_id: sessionId,
+            campaign_id: campaignId,
+            project_id: projectId,
+            visitor_key_hash: visitorKeyHash,
+            review_status: 'approved',
+            reviewed_at: new Date().toISOString(),
+          });
+      }
+
+      // Add to whitelist if requested
+      if (addToWhitelist && whitelistType && whitelistValue) {
+        const { data: campaign } = await supabase
+          .from('campaigns')
+          .select('bot_whitelist_ips, bot_whitelist_uas')
+          .eq('id', campaignId)
+          .single();
+
+        if (campaign) {
+          if (whitelistType === 'ip') {
+            const currentIps = campaign.bot_whitelist_ips || [];
+            if (!currentIps.includes(whitelistValue)) {
+              await supabase
+                .from('campaigns')
+                .update({ bot_whitelist_ips: [...currentIps, whitelistValue] })
+                .eq('id', campaignId);
+            }
+          } else if (whitelistType === 'ua') {
+            const currentUas = campaign.bot_whitelist_uas || [];
+            if (!currentUas.includes(whitelistValue)) {
+              await supabase
+                .from('campaigns')
+                .update({ bot_whitelist_uas: [...currentUas, whitelistValue] })
+                .eq('id', campaignId);
+            }
+          }
+        }
+      }
+
+      return { success: true };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['bot-analytics', variables.campaignId] });
+      queryClient.invalidateQueries({ queryKey: ['bot-review-queue', variables.campaignId] });
+      queryClient.invalidateQueries({ queryKey: ['campaign', variables.campaignId] });
+      toast({ title: 'Session Approved', description: 'Marked as legitimate traffic' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+// Mutation to reject a session (confirm as bot)
+export function useRejectSession() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      sessionId, 
+      campaignId,
+      projectId,
+      visitorKeyHash,
+    }: { 
+      sessionId: string; 
+      campaignId: string;
+      projectId: string;
+      visitorKeyHash: string;
+    }) => {
+      // Ensure session is marked as bot
+      await supabase
+        .from('sessions')
+        .update({ is_bot_suspected: true })
+        .eq('id', sessionId);
+
+      // Update or create review queue entry
+      const { data: existingReview } = await supabase
+        .from('bot_review_queue')
+        .select('id')
+        .eq('session_id', sessionId)
+        .maybeSingle();
+
+      if (existingReview) {
+        await supabase
+          .from('bot_review_queue')
+          .update({ 
+            review_status: 'rejected', 
+            reviewed_at: new Date().toISOString() 
+          })
+          .eq('id', existingReview.id);
+      } else {
+        await supabase
+          .from('bot_review_queue')
+          .insert({
+            session_id: sessionId,
+            campaign_id: campaignId,
+            project_id: projectId,
+            visitor_key_hash: visitorKeyHash,
+            review_status: 'rejected',
+            reviewed_at: new Date().toISOString(),
+          });
+      }
+
+      return { success: true };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['bot-analytics', variables.campaignId] });
+      queryClient.invalidateQueries({ queryKey: ['bot-review-queue', variables.campaignId] });
+      toast({ title: 'Session Rejected', description: 'Confirmed as bot traffic' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
   });
 }
