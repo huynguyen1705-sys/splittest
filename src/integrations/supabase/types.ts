@@ -437,6 +437,7 @@ export type Database = {
       sessions: {
         Row: {
           browser: string | null
+          campaign_id: string | null
           country: string | null
           device: string | null
           entry_page: string | null
@@ -459,6 +460,7 @@ export type Database = {
         }
         Insert: {
           browser?: string | null
+          campaign_id?: string | null
           country?: string | null
           device?: string | null
           entry_page?: string | null
@@ -481,6 +483,7 @@ export type Database = {
         }
         Update: {
           browser?: string | null
+          campaign_id?: string | null
           country?: string | null
           device?: string | null
           entry_page?: string | null
@@ -502,6 +505,13 @@ export type Database = {
           visitor_key_hash?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "sessions_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "sessions_project_id_fkey"
             columns: ["project_id"]

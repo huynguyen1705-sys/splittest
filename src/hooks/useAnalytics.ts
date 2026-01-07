@@ -61,34 +61,12 @@ export function useAnalytics(
         .eq('campaign_id', campaignId)
         .gte('ts', fiveMinutesAgo.toISOString());
 
-      // Get session IDs that are associated with this campaign from events_raw
-      const { data: campaignSessionIds } = await supabase
-        .from('events_raw')
-        .select('session_id')
+      // Fetch UTM data directly from sessions table using campaign_id
+      const { data: sessionsData } = await supabase
+        .from('sessions')
+        .select('utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer')
         .eq('campaign_id', campaignId)
-        .gte('ts', startTime.toISOString())
-        .not('session_id', 'is', null);
-
-      // Get unique session IDs for this campaign
-      const uniqueSessionIds = [...new Set((campaignSessionIds || []).map(e => e.session_id).filter(Boolean))];
-
-      // Fetch UTM data only for sessions related to this campaign
-      let sessionsData: Array<{
-        utm_source: string | null;
-        utm_medium: string | null;
-        utm_campaign: string | null;
-        gclid: string | null;
-        fbclid: string | null;
-        referrer: string | null;
-      }> = [];
-      
-      if (uniqueSessionIds.length > 0) {
-        const { data } = await supabase
-          .from('sessions')
-          .select('utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer')
-          .in('session_key', uniqueSessionIds);
-        sessionsData = data || [];
-      }
+        .gte('started_at', startTime.toISOString());
 
       const analytics: AnalyticsData = {
         totalAssigns: 0,
