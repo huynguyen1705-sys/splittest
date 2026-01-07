@@ -18,6 +18,7 @@ import { toast } from '@/hooks/use-toast';
 import { BotAction } from '@/types/database';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
+import { isValidHttpUrl } from '@/lib/utils';
 
 interface VariantInput {
   id?: string;
@@ -497,6 +498,13 @@ export default function CampaignEdit() {
       toast({ title: 'Error', description: 'All variants must have a destination URL', variant: 'destructive' });
       return;
     }
+
+    // Validate all destination URLs use http/https
+    const invalidUrlVariant = variants.find(v => !isValidHttpUrl(v.destination_url));
+    if (invalidUrlVariant) {
+      toast({ title: 'Error', description: `Invalid URL for "${invalidUrlVariant.name}": Only http/https URLs are allowed`, variant: 'destructive' });
+      return;
+    }
     
     if (totalWeight !== 100) {
       toast({ title: 'Error', description: 'Weights must sum to 100%', variant: 'destructive' });
@@ -524,6 +532,13 @@ export default function CampaignEdit() {
 
   const handleSaveBotProtection = async () => {
     if (!campaignId) return;
+    
+    // Validate honeypot URL if provided
+    if (honeypotUrl && !isValidHttpUrl(honeypotUrl)) {
+      toast({ title: 'Error', description: 'Honeypot URL must be a valid http/https URL', variant: 'destructive' });
+      return;
+    }
+    
     await updateCampaign.mutateAsync({
       id: campaignId,
       bot_action: botAction,
