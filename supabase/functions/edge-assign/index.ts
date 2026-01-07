@@ -5,7 +5,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Simple hash function for visitor keys
+// ============ UTILITY FUNCTIONS ============
+
 async function hashString(str: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(str);
@@ -14,7 +15,6 @@ async function hashString(str: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Parse user agent for device, browser, OS
 function parseUserAgent(ua: string): { device: string; browser: string; os: string } {
   const device = /mobile/i.test(ua) ? 'mobile' : /tablet/i.test(ua) ? 'tablet' : 'desktop';
   
@@ -35,7 +35,6 @@ function parseUserAgent(ua: string): { device: string; browser: string; os: stri
   return { device, browser, os };
 }
 
-// Weighted random selection
 function selectVariant(variants: Array<{ id: string; weight: number }>): string {
   const totalWeight = variants.reduce((sum, v) => sum + v.weight, 0);
   let random = Math.random() * totalWeight;
@@ -48,13 +47,194 @@ function selectVariant(variants: Array<{ id: string; weight: number }>): string 
   return variants[0].id;
 }
 
-// Normalize path by removing trailing slash
 function normalizePath(path: string): string {
   if (!path) return '/';
   return path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path;
 }
 
-// Check if targeting rules match - now includes path matching with url_match_mode
+// ============ BOT DETECTION ============
+
+interface BotSignals {
+  webdriver: boolean;
+  noPlugins: boolean;
+  knownBotUA: boolean;
+  suspiciousUA: boolean;
+  rateLimitExceeded: boolean;
+  missingHeaders: boolean;
+  datacenterIP: boolean;
+  automationProps: boolean;
+}
+
+interface BotDetectionResult {
+  score: number;
+  signals: BotSignals;
+  isSuspected: boolean;
+}
+
+const KNOWN_BOT_PATTERNS = [
+  'bot', 'crawler', 'spider', 'headless', 'phantom', 'selenium', 'puppeteer',
+  'playwright', 'webdriver', 'chrome-lighthouse', 'googlebot', 'bingbot',
+  'yandexbot', 'baiduspider', 'duckduckbot', 'slurp', 'ia_archiver',
+  'facebookexternalhit', 'twitterbot', 'linkedinbot', 'whatsapp', 'telegrambot',
+  'applebot', 'semrushbot', 'ahrefsbot', 'mj12bot', 'dotbot', 'rogerbot'
+];
+
+const SUSPICIOUS_UA_PATTERNS = [
+  /^mozilla\/5\.0$/i,  // Too generic
+  /^$/,                 // Empty
+  /^curl\//i,
+  /^wget\//i,
+  /^python-requests/i,
+  /^axios\//i,
+  /^node-fetch/i,
+  /^go-http-client/i,
+  /^java\//i,
+];
+
+function detectBot(
+  userAgent: string,
+  headers: Headers,
+  clientSignals?: string
+): BotDetectionResult {
+  const signals: BotSignals = {
+    webdriver: false,
+    noPlugins: false,
+    knownBotUA: false,
+    suspiciousUA: false,
+    rateLimitExceeded: false,
+    missingHeaders: false,
+    datacenterIP: false,
+    automationProps: false,
+  };
+
+  const ua = userAgent.toLowerCase();
+
+  // Check known bot patterns
+  for (const pattern of KNOWN_BOT_PATTERNS) {
+    if (ua.includes(pattern)) {
+      signals.knownBotUA = true;
+      break;
+    }
+  }
+
+  // Check suspicious UA patterns
+  for (const pattern of SUSPICIOUS_UA_PATTERNS) {
+    if (pattern.test(userAgent)) {
+      signals.suspiciousUA = true;
+      break;
+    }
+  }
+
+  // Check for missing headers (bots often don't send all headers)
+  const acceptLang = headers.get('accept-language');
+  const acceptEnc = headers.get('accept-encoding');
+  const accept = headers.get('accept');
+  
+  if (!acceptLang || !acceptEnc || !accept) {
+    signals.missingHeaders = true;
+  }
+
+  // Parse client-side bot signals (base64 encoded JSON)
+  if (clientSignals) {
+    try {
+      const decoded = atob(clientSignals);
+      const parsed = JSON.parse(decoded);
+      
+      if (parsed.wd === true) signals.webdriver = true;
+      if (parsed.pl === 0) signals.noPlugins = true;
+      if (parsed.ap === true) signals.automationProps = true;
+    } catch {
+      // Invalid client signals, ignore
+    }
+  }
+
+  // Calculate bot score
+  let score = 0;
+  if (signals.webdriver) score += 40;
+  if (signals.noPlugins) score += 15;
+  if (signals.knownBotUA) score += 50;
+  if (signals.suspiciousUA) score += 20;
+  if (signals.rateLimitExceeded) score += 30;
+  if (signals.missingHeaders) score += 10;
+  if (signals.datacenterIP) score += 20;
+  if (signals.automationProps) score += 25;
+
+  score = Math.min(score, 100);
+
+  return {
+    score,
+    signals,
+    isSuspected: score >= 70,
+  };
+}
+
+function isWhitelisted(
+  ip: string,
+  userAgent: string,
+  whitelistIps: string[] = [],
+  whitelistUas: string[] = []
+): boolean {
+  // Check IP whitelist
+  if (whitelistIps.includes(ip)) {
+    console.log(`IP ${ip} is whitelisted`);
+    return true;
+  }
+
+  // Check UA whitelist (pattern matching)
+  const uaLower = userAgent.toLowerCase();
+  for (const pattern of whitelistUas) {
+    if (pattern && uaLower.includes(pattern.toLowerCase())) {
+      console.log(`UA matches whitelist pattern: ${pattern}`);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+interface BotActionResult {
+  action: 'allow' | 'allow_flagged' | 'soft_block' | 'honeypot' | 'block';
+  reason: string;
+  delay?: number;
+  url?: string;
+}
+
+function decideBotAction(
+  botScore: number,
+  botThreshold: number,
+  botAction: string,
+  honeypotUrl?: string | null,
+  softBlockDelay?: number
+): BotActionResult {
+  // Below threshold - allow normally
+  if (botScore < botThreshold) {
+    return { action: 'allow', reason: 'below_threshold' };
+  }
+
+  // Above threshold - check campaign settings
+  switch (botAction) {
+    case 'flag_only':
+      return { action: 'allow_flagged', reason: 'flagged_only' };
+    
+    case 'soft_block':
+      return { action: 'soft_block', reason: 'soft_blocked', delay: softBlockDelay || 3000 };
+    
+    case 'redirect_honeypot':
+      if (honeypotUrl) {
+        return { action: 'honeypot', reason: 'honeypot_redirect', url: honeypotUrl };
+      }
+      return { action: 'allow_flagged', reason: 'no_honeypot_url' };
+    
+    case 'block':
+      return { action: 'block', reason: 'blocked' };
+    
+    default:
+      return { action: 'allow_flagged', reason: 'default_flag' };
+  }
+}
+
+// ============ RULE MATCHING ============
+
 function matchesRules(
   rules: { 
     country_in: string[]; 
@@ -75,102 +255,57 @@ function matchesRules(
     query: string;
   }
 ): boolean {
-  // Check country targeting
-  if (rules.country_in && rules.country_in.length > 0 && !rules.country_in.includes(context.country)) return false;
+  if (rules.country_in?.length > 0 && !rules.country_in.includes(context.country)) return false;
+  if (rules.device_in?.length > 0 && !rules.device_in.includes(context.device)) return false;
+  if (rules.browser_in?.length > 0 && !rules.browser_in.includes(context.browser)) return false;
+  if (rules.os_in?.length > 0 && !rules.os_in.includes(context.os)) return false;
+  if (rules.lang_in?.length > 0 && !rules.lang_in.includes(context.lang)) return false;
   
-  // Check device targeting
-  if (rules.device_in && rules.device_in.length > 0 && !rules.device_in.includes(context.device)) return false;
-  
-  // Check browser targeting
-  if (rules.browser_in && rules.browser_in.length > 0 && !rules.browser_in.includes(context.browser)) return false;
-  
-  // Check OS targeting
-  if (rules.os_in && rules.os_in.length > 0 && !rules.os_in.includes(context.os)) return false;
-  
-  // Check language targeting
-  if (rules.lang_in && rules.lang_in.length > 0 && !rules.lang_in.includes(context.lang)) return false;
-  
-  // Check path targeting with url_match_mode support
-  if (rules.include_paths && rules.include_paths.length > 0) {
+  if (rules.include_paths?.length > 0) {
     const matchMode = rules.url_match_mode || 'path_prefix';
-    
-    // Combine path and query for full URL matching
     const fullPath = context.path + (context.query ? '?' + context.query : '');
-    
-    console.log(`URL Match Mode: ${matchMode}, Path: ${context.path}, Query: ${context.query}, FullPath: ${fullPath}`);
     
     const pathMatches = rules.include_paths.some(pattern => {
       if (!pattern) return false;
       
       switch (matchMode) {
         case 'exact_path':
-          // Exact path match - ONLY matches when NO query params are present
-          // /quang-cao-in/ matches only /quang-cao-in/ (without ?utm_source=..., ?gclid=..., etc.)
-          // If visitor URL has query params, it does NOT match
-          if (context.query && context.query.length > 0) {
-            console.log(`exact_path: Query params present ("${context.query}"), no match`);
-            return false;
-          }
-          const normalizedPath = normalizePath(context.path);
-          const normalizedPattern = normalizePath(pattern.replace(/\*$/, '')); // Remove trailing * if present
-          const exactMatch = normalizedPath === normalizedPattern;
-          console.log(`exact_path: "${normalizedPath}" === "${normalizedPattern}" = ${exactMatch}`);
-          return exactMatch;
+          if (context.query?.length > 0) return false;
+          return normalizePath(context.path) === normalizePath(pattern.replace(/\*$/, ''));
           
         case 'path_prefix':
-          // Path prefix match with wildcard support - ignores query params
-          // /quang-cao-in/* matches /quang-cao-in/page1 but NOT /quang-cao-in/?utm=x
           if (pattern.endsWith('*')) {
-            const basePattern = pattern.slice(0, -1); // Remove trailing *
-            const prefixMatch = context.path.startsWith(basePattern);
-            console.log(`path_prefix (wildcard): "${context.path}".startsWith("${basePattern}") = ${prefixMatch}`);
-            return prefixMatch;
+            return context.path.startsWith(pattern.slice(0, -1));
           }
-          // Exact path match if no wildcard
-          const pathPrefixNorm = normalizePath(context.path);
-          const patternPrefixNorm = normalizePath(pattern);
-          const pathPrefixMatch = pathPrefixNorm === patternPrefixNorm;
-          console.log(`path_prefix (exact): "${pathPrefixNorm}" === "${patternPrefixNorm}" = ${pathPrefixMatch}`);
-          return pathPrefixMatch;
+          return normalizePath(context.path) === normalizePath(pattern);
           
         case 'full_url_prefix':
-          // Full URL prefix match - includes query params
-          // /quang-cao-in/* matches /quang-cao-in/?gclid=abc
           if (pattern.endsWith('*')) {
-            const basePattern = pattern.slice(0, -1); // Remove trailing *
-            const fullUrlMatch = fullPath.startsWith(basePattern);
-            console.log(`full_url_prefix (wildcard): "${fullPath}".startsWith("${basePattern}") = ${fullUrlMatch}`);
-            return fullUrlMatch;
+            return fullPath.startsWith(pattern.slice(0, -1));
           }
-          // Exact full URL match if no wildcard
-          const fullUrlExactMatch = fullPath === pattern || fullPath.startsWith(pattern + '?');
-          console.log(`full_url_prefix (exact): "${fullPath}" matches "${pattern}" = ${fullUrlExactMatch}`);
-          return fullUrlExactMatch;
+          return fullPath === pattern || fullPath.startsWith(pattern + '?');
           
         default:
           return false;
       }
     });
     
-    if (!pathMatches) {
-      console.log(`Path ${context.path} did not match any patterns with mode ${matchMode}: ${JSON.stringify(rules.include_paths)}`);
-      return false;
-    }
+    if (!pathMatches) return false;
   }
   
   return true;
 }
 
-// Get country from IP using free ip-api.com service
+// ============ GEO & IP FUNCTIONS ============
+
 async function getCountryFromIP(ip: string): Promise<string> {
   try {
-    // Skip local/private IPs
     if (ip === '127.0.0.1' || ip === '::1' || ip.startsWith('10.') || ip.startsWith('192.168.') || ip.startsWith('172.')) {
       return 'US';
     }
     
     const response = await fetch(`http://ip-api.com/json/${ip}?fields=countryCode`, {
-      signal: AbortSignal.timeout(2000), // 2 second timeout
+      signal: AbortSignal.timeout(2000),
     });
     
     if (response.ok) {
@@ -184,12 +319,10 @@ async function getCountryFromIP(ip: string): Promise<string> {
     console.warn('GeoIP lookup failed:', error);
   }
   
-  return 'US'; // Default fallback
+  return 'US';
 }
 
-// Extract client IP from request headers
 function getClientIP(req: Request): string {
-  // Check various headers in order of priority
   const cfConnectingIP = req.headers.get('cf-connecting-ip');
   if (cfConnectingIP) return cfConnectingIP;
   
@@ -198,44 +331,39 @@ function getClientIP(req: Request): string {
   
   const xForwardedFor = req.headers.get('x-forwarded-for');
   if (xForwardedFor) {
-    // Take the first IP in the chain (original client)
     return xForwardedFor.split(',')[0].trim();
   }
   
   return '127.0.0.1';
 }
 
-// Generate session ID based on visitor key and 30-minute window
+// ============ SESSION & URL HELPERS ============
+
 async function generateSessionId(visitorKeyHash: string): Promise<string> {
-  const sessionWindow = 30 * 60 * 1000; // 30 minutes in milliseconds
+  const sessionWindow = 30 * 60 * 1000;
   const windowKey = Math.floor(Date.now() / sessionWindow).toString();
   return await hashString(visitorKeyHash + windowKey);
 }
 
-// Build final URL with path wildcard and query parameter handling
 function buildFinalUrl(destinationUrl: string, path: string, originalQuery: string): string {
   let finalUrl = destinationUrl;
   
   if (!finalUrl) return '';
   
   try {
-    // Handle path wildcard: if destination ends with /*, append visitor's path
     if (finalUrl.includes('/*')) {
       const baseUrl = finalUrl.replace('/*', '');
       const destUrl = new URL(baseUrl);
       const visitorPath = path.startsWith('/') ? path.slice(1) : path;
       destUrl.pathname = destUrl.pathname.replace(/\/$/, '') + '/' + visitorPath;
       finalUrl = destUrl.toString();
-      console.log(`Path wildcard applied: ${destinationUrl} + ${path} -> ${finalUrl}`);
     }
     
-    // Merge original query params into destination URL
     if (originalQuery) {
       const destUrl = new URL(finalUrl);
       const origParams = new URLSearchParams(originalQuery);
       
       origParams.forEach((value, key) => {
-        // Don't override existing params in destination URL
         if (!destUrl.searchParams.has(key)) {
           destUrl.searchParams.set(key, value);
         }
@@ -250,8 +378,9 @@ function buildFinalUrl(destinationUrl: string, path: string, originalQuery: stri
   return finalUrl;
 }
 
+// ============ MAIN HANDLER ============
+
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -260,13 +389,14 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const token = url.searchParams.get('token');
     const visitorKey = url.searchParams.get('vk');
-    const sessionKey = url.searchParams.get('sk') || ''; // Session key from client
+    const sessionKey = url.searchParams.get('sk') || '';
     const path = url.searchParams.get('path') || '/';
     const lang = url.searchParams.get('lang') || 'en';
     const dnt = url.searchParams.get('dnt') === '1';
     const originalQuery = url.searchParams.get('oq') || '';
-    
-    // Parse UTM parameters from originalQuery (the visitor's original URL params)
+    const botSignalsParam = url.searchParams.get('bs') || ''; // Client-side bot signals
+
+    // Parse UTM parameters
     const originalParams = new URLSearchParams(originalQuery);
     const utmSource = originalParams.get('utm_source') || '';
     const utmMedium = originalParams.get('utm_medium') || '';
@@ -274,7 +404,7 @@ Deno.serve(async (req) => {
     const gclid = originalParams.get('gclid') || '';
     const fbclid = originalParams.get('fbclid') || '';
     
-    console.log(`UTM params from originalQuery: source=${utmSource}, medium=${utmMedium}, campaign=${utmCampaign}, gclid=${gclid ? 'yes' : 'no'}, fbclid=${fbclid ? 'yes' : 'no'}`);
+    console.log(`UTM params: source=${utmSource}, medium=${utmMedium}, campaign=${utmCampaign}`);
 
     if (!token) {
       return new Response(JSON.stringify({ error: 'Missing token' }), {
@@ -283,12 +413,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Initialize Supabase client with service role for edge function operations
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get project by token
+    // Get project
     const { data: project, error: projectError } = await supabase
       .from('projects')
       .select('id, primary_domain')
@@ -304,26 +433,29 @@ Deno.serve(async (req) => {
 
     // Parse user context
     const userAgent = req.headers.get('user-agent') || '';
+    const clientIP = getClientIP(req);
+    const ipHash = await hashString(clientIP);
     const { device, browser, os } = parseUserAgent(userAgent);
     const referrer = req.headers.get('referer') || '';
     
-    // Get country - first try Cloudflare header, then fallback to IP geolocation
+    // Get country
     let country = req.headers.get('cf-ipcountry');
     if (!country || country === 'XX') {
-      const clientIP = getClientIP(req);
       console.log(`No CF header, looking up IP: ${clientIP}`);
       country = await getCountryFromIP(clientIP);
     }
     
-    // Context now includes path and query for URL matching
     const context = { country, device, browser, os, lang, path, query: originalQuery };
     console.log('Visitor context:', JSON.stringify(context));
 
-    // Get active campaigns for this project with include_paths and url_match_mode in rules
+    // Get active campaigns with bot protection settings
     const { data: campaigns } = await supabase
       .from('campaigns')
       .select(`
-        id, sticky_enabled, respect_dnt,
+        id, sticky_enabled, respect_dnt, 
+        bot_action, bot_threshold, honeypot_url, 
+        bot_whitelist_ips, bot_whitelist_uas, 
+        bot_challenge_enabled, bot_soft_block_delay_ms,
         variants (id, destination_url, weight, is_control),
         campaign_rules (country_in, device_in, browser_in, os_in, lang_in, include_paths, url_match_mode)
       `)
@@ -337,7 +469,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Find matching campaign with path-based rules
+    // Find matching campaign
     let matchedCampaign = null;
     for (const campaign of campaigns) {
       const rulesData = campaign.campaign_rules;
@@ -345,15 +477,10 @@ Deno.serve(async (req) => {
         ? (rulesData[0] || { country_in: [], device_in: [], browser_in: [], os_in: [], lang_in: [], include_paths: [] })
         : (rulesData || { country_in: [], device_in: [], browser_in: [], os_in: [], lang_in: [], include_paths: [] });
       
-      console.log(`Campaign ${campaign.id} rules:`, JSON.stringify(rules));
-      console.log(`Checking match: country_in=${JSON.stringify(rules.country_in)}, include_paths=${JSON.stringify(rules.include_paths)}, visitor_path=${context.path}`);
-      
       if (matchesRules(rules, context)) {
         console.log(`Campaign ${campaign.id} MATCHED`);
         matchedCampaign = campaign;
         break;
-      } else {
-        console.log(`Campaign ${campaign.id} NOT matched`);
       }
     }
 
@@ -363,7 +490,56 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Handle DNT - assign variant but don't store
+    // ============ BOT DETECTION ============
+    const botDetection = detectBot(userAgent, req.headers, botSignalsParam);
+    console.log(`Bot detection - Score: ${botDetection.score}, Signals: ${JSON.stringify(botDetection.signals)}`);
+
+    // Check whitelist first
+    const whitelisted = isWhitelisted(
+      clientIP,
+      userAgent,
+      matchedCampaign.bot_whitelist_ips || [],
+      matchedCampaign.bot_whitelist_uas || []
+    );
+
+    let botActionResult: BotActionResult = { action: 'allow', reason: 'whitelisted' };
+    
+    if (!whitelisted) {
+      botActionResult = decideBotAction(
+        botDetection.score,
+        matchedCampaign.bot_threshold || 70,
+        matchedCampaign.bot_action || 'flag_only',
+        matchedCampaign.honeypot_url,
+        matchedCampaign.bot_soft_block_delay_ms
+      );
+      console.log(`Bot action decision: ${botActionResult.action} (${botActionResult.reason})`);
+    }
+
+    // Handle bot blocking actions
+    if (botActionResult.action === 'block') {
+      console.log('Bot blocked');
+      return new Response(JSON.stringify({ 
+        shouldRedirect: false, 
+        reason: 'bot_detected',
+        botScore: botDetection.score,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (botActionResult.action === 'honeypot' && botActionResult.url) {
+      console.log(`Redirecting bot to honeypot: ${botActionResult.url}`);
+      return new Response(JSON.stringify({ 
+        shouldRedirect: true, 
+        url: botActionResult.url,
+        reason: 'honeypot_redirect',
+        botScore: botDetection.score,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Handle DNT
     if (matchedCampaign.respect_dnt && dnt) {
       const selectedVariantId = selectVariant(matchedCampaign.variants);
       const selectedVariant = matchedCampaign.variants.find((v: { id: string }) => v.id === selectedVariantId);
@@ -380,16 +556,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Generate or use visitor key
+    // Generate visitor/session keys
     const actualVisitorKey = visitorKey || crypto.randomUUID();
     const visitorKeyHash = await hashString(actualVisitorKey);
-    
-    // Generate session ID for deduplication (30-minute window)
     const sessionId = await generateSessionId(visitorKeyHash);
-    console.log(`Session ID generated: ${sessionId.slice(0, 16)}...`);
 
-    // === SESSION-BASED DEDUPLICATION ===
-    // Check if we already have an assign event for this session
+    // Check for existing assign in this session
     const { data: existingAssign } = await supabase
       .from('events_raw')
       .select('variant_id')
@@ -400,8 +572,6 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (existingAssign) {
-      // Return cached result without logging new event
-      console.log(`Session already assigned to variant ${existingAssign.variant_id}, returning cached result`);
       const cachedVariant = matchedCampaign.variants.find((v: { id: string }) => v.id === existingAssign.variant_id);
       const cachedUrl = buildFinalUrl(cachedVariant?.destination_url || '', path, originalQuery);
       
@@ -411,8 +581,9 @@ Deno.serve(async (req) => {
         campaignId: matchedCampaign.id,
         variantId: existingAssign.variant_id,
         visitorKey: actualVisitorKey,
-        cached: true, // Flag to tell client this is a cached response
+        cached: true,
         ttl: 86400,
+        ...(botActionResult.action === 'soft_block' && { softBlockDelay: botActionResult.delay }),
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -429,7 +600,6 @@ Deno.serve(async (req) => {
 
     if (existingVisitor) {
       visitorId = existingVisitor.id;
-      // Update last seen
       await supabase
         .from('visitors')
         .update({ last_seen_at: new Date().toISOString() })
@@ -444,15 +614,10 @@ Deno.serve(async (req) => {
         .select('id')
         .single();
 
-      if (insertError) {
-        console.error('Failed to create visitor:', insertError);
-        visitorId = crypto.randomUUID();
-      } else {
-        visitorId = newVisitor.id;
-      }
+      visitorId = insertError ? crypto.randomUUID() : newVisitor.id;
     }
 
-    // Check for existing assignment if sticky enabled
+    // Select variant
     let selectedVariantId: string;
     
     if (matchedCampaign.sticky_enabled) {
@@ -467,8 +632,6 @@ Deno.serve(async (req) => {
         selectedVariantId = existingAssignment.variant_id;
       } else {
         selectedVariantId = selectVariant(matchedCampaign.variants);
-        
-        // Create assignment
         await supabase.from('assignments').insert({
           campaign_id: matchedCampaign.id,
           visitor_id: visitorId,
@@ -482,7 +645,7 @@ Deno.serve(async (req) => {
     const selectedVariant = matchedCampaign.variants.find((v: { id: string }) => v.id === selectedVariantId);
     const finalUrl = buildFinalUrl(selectedVariant?.destination_url || '', path, originalQuery);
 
-    // Log assignment event with session_id for deduplication
+    // Log assignment event
     await supabase.from('events_raw').insert({
       project_id: project.id,
       campaign_id: matchedCampaign.id,
@@ -495,13 +658,16 @@ Deno.serve(async (req) => {
       lang,
       visitor_key_hash: visitorKeyHash,
       session_id: sessionId,
+      ip_hash: ipHash,
       path,
       referrer: referrer.slice(0, 500),
       user_agent: userAgent.slice(0, 500),
     });
 
-    // Create or update session record with campaign_id
+    // Create/update session with bot detection data
+    const isBotSuspected = botDetection.isSuspected || botActionResult.action !== 'allow';
     const fullSessionKey = sessionKey || sessionId;
+    
     await supabase.from('sessions').upsert({
       project_id: project.id,
       campaign_id: matchedCampaign.id,
@@ -520,11 +686,30 @@ Deno.serve(async (req) => {
       gclid: gclid || null,
       fbclid: fbclid || null,
       last_activity_at: new Date().toISOString(),
+      // Bot detection fields
+      bot_score: botDetection.score,
+      bot_signals: botDetection.signals,
+      is_bot_suspected: isBotSuspected,
     }, {
       onConflict: 'project_id,session_key',
     });
 
-    console.log(`New assign logged for session ${sessionId.slice(0, 16)}..., variant ${selectedVariantId}`);
+    // Add to bot review queue if suspected
+    if (isBotSuspected && botActionResult.action !== 'allow') {
+      const { error: reviewError } = await supabase.from('bot_review_queue').insert({
+        project_id: project.id,
+        campaign_id: matchedCampaign.id,
+        visitor_key_hash: visitorKeyHash,
+        ip_hash: ipHash,
+        user_agent: userAgent.slice(0, 500),
+        bot_score: botDetection.score,
+        bot_signals: botDetection.signals,
+        review_status: 'pending',
+      });
+      if (reviewError) console.warn('Failed to add to bot review queue:', reviewError);
+    }
+
+    console.log(`Assign logged - Session: ${sessionId.slice(0, 16)}..., Variant: ${selectedVariantId}, BotScore: ${botDetection.score}`);
 
     return new Response(JSON.stringify({
       shouldRedirect: true,
@@ -534,7 +719,9 @@ Deno.serve(async (req) => {
       visitorKey: actualVisitorKey,
       sessionId: sessionId,
       cached: false,
-      ttl: 86400, // 24 hours
+      ttl: 86400,
+      ...(botActionResult.action === 'soft_block' && { softBlockDelay: botActionResult.delay }),
+      ...(isBotSuspected && { botScore: botDetection.score }),
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
