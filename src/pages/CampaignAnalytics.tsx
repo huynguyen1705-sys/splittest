@@ -387,7 +387,10 @@ export default function CampaignAnalytics() {
             <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
               <TabsList className="inline-flex w-max sm:w-auto">
                 <TabsTrigger value="overview" className="text-xs sm:text-sm px-2.5 sm:px-3">Overview</TabsTrigger>
-                <TabsTrigger value="traffic" className="text-xs sm:text-sm px-2.5 sm:px-3">Sources</TabsTrigger>
+                <TabsTrigger value="traffic" className="text-xs sm:text-sm px-2.5 sm:px-3">
+                  <span className="sm:hidden">Traffic</span>
+                  <span className="hidden sm:inline">Traffic Sources</span>
+                </TabsTrigger>
                 <TabsTrigger value="realtime" className="relative text-xs sm:text-sm px-2.5 sm:px-3">
                   Real-Time
                   {newEventCount > 0 && (
@@ -400,7 +403,7 @@ export default function CampaignAnalytics() {
                 <TabsTrigger value="bot-traffic" className="text-xs sm:text-sm flex items-center gap-1 px-2.5 sm:px-3">
                   <Bot className="w-3 h-3" />
                   <span className="hidden sm:inline">Bot Traffic</span>
-                  <span className="sm:hidden">Bots</span>
+                  <span className="sm:hidden">Bot</span>
                   {(botAnalytics?.suspectedBotSessions || 0) > 0 && (
                     <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-destructive/20 text-destructive rounded-full">
                       {botAnalytics?.suspectedBotSessions}
