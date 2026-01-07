@@ -28,6 +28,7 @@ import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { calculateSignificance, analyticsToVariantStats, VariantStats, SignificanceResult } from '@/lib/statistics';
 import { StatisticalSignificance, MultiVariantSignificanceSummary } from '@/components/StatisticalSignificance';
+import { SplitTestResults, SplitTestSummaryBadge } from '@/components/SplitTestResults';
 
 const COLORS = ['hsl(239, 84%, 67%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(199, 89%, 48%)', 'hsl(280, 68%, 60%)'];
 
@@ -728,39 +729,18 @@ export default function CampaignAnalytics() {
                 </CardContent>
               </Card>
 
-              {/* Statistical Significance */}
-              {significanceData && significanceData.results.size > 0 ? (
-                <div className="space-y-4">
-                  {/* Summary */}
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base sm:text-lg">A/B Test Results</CardTitle>
-                      <CardDescription>Statistical analysis of variant performance</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <MultiVariantSignificanceSummary
-                        variants={significanceData.variantStats}
-                        results={significanceData.results}
-                        controlName={significanceData.controlName}
-                      />
-                    </CardContent>
-                  </Card>
-
-                  {/* Detailed view for first non-control variant */}
-                  {significanceData.variantStats.length === 2 && (
-                    <StatisticalSignificance
-                      control={significanceData.controlStats}
-                      treatment={significanceData.variantStats.find(v => v.name !== significanceData.controlName)!}
-                      result={Array.from(significanceData.results.values())[0]}
-                    />
-                  )}
-                </div>
+              {/* Split Test Health - Replaces misleading A/B significance */}
+              {variantData.length >= 2 ? (
+                <SplitTestResults
+                  variants={variantData}
+                  totalAssigns={analytics?.totalAssigns || 0}
+                />
               ) : (
                 <Card className="flex items-center justify-center">
                   <CardContent className="py-12 text-center">
                     <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-muted-foreground/30" />
                     <p className="text-muted-foreground">
-                      Need at least 2 variants to calculate statistical significance
+                      Need at least 2 variants to show split test health
                     </p>
                   </CardContent>
                 </Card>
