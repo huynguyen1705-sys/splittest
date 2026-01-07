@@ -166,9 +166,9 @@ export interface AnalyticsData {
   byBrowser: Record<string, number>;
   byOS: Record<string, number>;
   byLang: Record<string, number>;
-  byUtmSource: Record<string, number>;
-  byUtmMedium: Record<string, number>;
-  byUtmCampaign: Record<string, number>;
-  byReferrer: Record<string, number>;
+  byUtmSource: Record<string, { sessions: number; uniqueVisitors: number }>;
+  byUtmMedium: Record<string, { sessions: number; uniqueVisitors: number }>;
+  byUtmCampaign: Record<string, { sessions: number; uniqueVisitors: number }>;
+  byReferrer: Record<string, { sessions: number; uniqueVisitors: number }>;
   timeSeries: { ts: string; assigns: number; redirectsOk: number; uniqueVisitors?: number }[];
 }
