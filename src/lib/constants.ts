@@ -110,5 +110,6 @@ export const TIMEZONES = [
   { value: 'Asia/Tokyo', label: 'Tokyo' },
   { value: 'Asia/Shanghai', label: 'Shanghai' },
   { value: 'Asia/Singapore', label: 'Singapore' },
+  { value: 'Asia/Bangkok', label: 'Bangkok' },
   { value: 'Australia/Sydney', label: 'Sydney' },
 ];
