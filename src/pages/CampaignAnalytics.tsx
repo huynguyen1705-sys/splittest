@@ -1207,7 +1207,9 @@ export default function CampaignAnalytics() {
                             className="text-xs"
                             tick={{ fontSize: 10 }}
                             tickFormatter={(v) => {
-                              const date = new Date(v);
+                              const dateStr = v.length === 13 ? `${v}:00:00` : v.length === 16 ? `${v}:00` : v;
+                              const date = new Date(dateStr);
+                              if (isNaN(date.getTime())) return v;
                               return date.toLocaleDateString([], { weekday: 'short' }) + ' ' + 
                                      date.toLocaleTimeString([], { hour: '2-digit' });
                             }}
@@ -1216,7 +1218,11 @@ export default function CampaignAnalytics() {
                           <YAxis className="text-xs" tick={{ fontSize: 10 }} width={35} />
                           <Tooltip 
                             contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 12 }}
-                            labelFormatter={(v) => new Date(v).toLocaleString()}
+                            labelFormatter={(v) => {
+                              const dateStr = v.length === 13 ? `${v}:00:00` : v.length === 16 ? `${v}:00` : v;
+                              const date = new Date(dateStr);
+                              return isNaN(date.getTime()) ? v : date.toLocaleString();
+                            }}
                           />
                           <Line 
                             type="monotone" 
