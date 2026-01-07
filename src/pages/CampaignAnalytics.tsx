@@ -1016,6 +1016,8 @@ export default function CampaignAnalytics() {
               byISP={analytics?.byISP || []}
               networkType={analytics?.networkType || { mobile: 0, fixed: 0 }}
               proxyUsage={analytics?.proxyUsage || { proxy: 0, direct: 0 }}
+              byHour={analytics?.byHour || {}}
+              timezone={project?.timezone}
             />
 
             {/* Existing charts */}
