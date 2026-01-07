@@ -500,10 +500,11 @@ Deno.serve(async (req) => {
       user_agent: userAgent.slice(0, 500),
     });
 
-    // Create or update session record
+    // Create or update session record with campaign_id
     const fullSessionKey = sessionKey || sessionId;
     await supabase.from('sessions').upsert({
       project_id: project.id,
+      campaign_id: matchedCampaign.id,
       visitor_key_hash: visitorKeyHash,
       session_key: fullSessionKey,
       entry_page: path,
