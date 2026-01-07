@@ -517,7 +517,7 @@ export default function CampaignAnalytics() {
                       <p className="text-xs sm:text-sm text-muted-foreground">Unique Visitors</p>
                       <p className="text-lg sm:text-2xl font-bold">{analytics?.uniqueVisitors?.toLocaleString() || 0}</p>
                       <p className="text-[10px] text-muted-foreground">
-                        Raw: {analytics?.totalAssigns.toLocaleString() || 0}
+                        Assigns: {analytics?.totalAssigns.toLocaleString() || 0}
                       </p>
                     </div>
                   </div>
