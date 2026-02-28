@@ -23,6 +23,11 @@ export function useAnalytics(
     queryFn: async (): Promise<AnalyticsData> => {
       if (!campaignId) throw new Error('Campaign ID required');
 
+      // Trigger on-demand aggregation (fire-and-forget, don't block UI)
+      supabase.functions.invoke('aggregate-events').catch((err) => {
+        console.warn('On-demand aggregation failed (non-blocking):', err);
+      });
+
       const now = new Date();
       let startTime: Date;
       let endTime: Date = now;
