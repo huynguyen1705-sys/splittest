@@ -15,23 +15,34 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get the current minute timestamp (floored to minute)
+    // Process all events up to 1 minute ago (to ensure events are fully written)
     const now = new Date();
-    now.setSeconds(0, 0);
+    const cutoff = new Date(now.getTime() - 60000);
+    cutoff.setSeconds(0, 0);
+    const cutoffIso = cutoff.toISOString();
+
+    // Find the latest aggregated minute to avoid reprocessing
+    const { data: latestAgg } = await supabase
+      .from('aggregates_minute')
+      .select('minute_ts')
+      .order('minute_ts', { ascending: false })
+      .limit(1);
+
+    const lastAggregated = latestAgg?.[0]?.minute_ts;
     
-    // Process the previous minute to ensure all events are captured
-    const minuteTs = new Date(now.getTime() - 60000);
-    const minuteStart = minuteTs.toISOString();
-    const minuteEnd = new Date(minuteTs.getTime() + 60000).toISOString();
+    console.log(`Aggregating events from ${lastAggregated || 'beginning'} to ${cutoffIso}`);
 
-    console.log(`Aggregating events from ${minuteStart} to ${minuteEnd}`);
-
-    // Get all raw events for the target minute that haven't been aggregated yet
-    const { data: events, error: eventsError } = await supabase
+    // Get all raw events that haven't been aggregated yet
+    let query = supabase
       .from('events_raw')
       .select('*')
-      .gte('ts', minuteStart)
-      .lt('ts', minuteEnd);
+      .lt('ts', cutoffIso);
+    
+    if (lastAggregated) {
+      query = query.gte('ts', lastAggregated);
+    }
+
+    const { data: events, error: eventsError } = await query;
 
     if (eventsError) {
       console.error('Failed to fetch events:', eventsError);
@@ -40,18 +51,19 @@ Deno.serve(async (req) => {
 
     if (!events || events.length === 0) {
       console.log('No events to aggregate');
-      return new Response(JSON.stringify({ message: 'No events to aggregate', minuteTs: minuteStart }), {
+      return new Response(JSON.stringify({ message: 'No events to aggregate' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     console.log(`Found ${events.length} events to aggregate`);
 
-    // Group events by project, campaign, variant, and dimensions
+    // Group events by minute, project, campaign, variant, and dimensions
     const aggregates = new Map<string, {
       project_id: string;
       campaign_id: string;
       variant_id: string | null;
+      minute_ts: string;
       country: string | null;
       device: string | null;
       browser: string | null;
@@ -67,11 +79,17 @@ Deno.serve(async (req) => {
     }>();
 
     for (const event of events) {
+      // Floor timestamp to minute
+      const eventDate = new Date(event.ts);
+      eventDate.setSeconds(0, 0);
+      const minuteTs = eventDate.toISOString();
+
       // Create a composite key for grouping
       const key = [
         event.project_id,
         event.campaign_id || 'null',
         event.variant_id || 'null',
+        minuteTs,
         event.country || 'unknown',
         event.device || 'unknown',
         event.browser || 'unknown',
@@ -84,6 +102,7 @@ Deno.serve(async (req) => {
           project_id: event.project_id,
           campaign_id: event.campaign_id,
           variant_id: event.variant_id,
+          minute_ts: minuteTs,
           country: event.country,
           device: event.device,
           browser: event.browser,
@@ -133,7 +152,7 @@ Deno.serve(async (req) => {
         project_id: agg.project_id,
         campaign_id: agg.campaign_id,
         variant_id: agg.variant_id,
-        minute_ts: minuteStart,
+        minute_ts: agg.minute_ts,
         country: agg.country,
         device: agg.device,
         browser: agg.browser,
@@ -165,7 +184,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      minuteTs: minuteStart,
+      cutoff: cutoffIso,
       eventsProcessed: events.length,
       aggregatesCreated: aggregateRows.length,
     }), {
