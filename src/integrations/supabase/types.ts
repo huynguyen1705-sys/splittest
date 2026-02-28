@@ -14,6 +14,88 @@ export type Database = {
   }
   public: {
     Tables: {
+      aggregates_daily: {
+        Row: {
+          assigns: number | null
+          avg_ttr_ms: number | null
+          browser: string | null
+          campaign_id: string
+          country: string | null
+          created_at: string
+          day_ts: string
+          device: string | null
+          id: string
+          lang: string | null
+          os: string | null
+          project_id: string
+          redirects_fail: number | null
+          redirects_ok: number | null
+          unique_sessions: number | null
+          unique_visitors: number | null
+          variant_id: string | null
+        }
+        Insert: {
+          assigns?: number | null
+          avg_ttr_ms?: number | null
+          browser?: string | null
+          campaign_id: string
+          country?: string | null
+          created_at?: string
+          day_ts: string
+          device?: string | null
+          id?: string
+          lang?: string | null
+          os?: string | null
+          project_id: string
+          redirects_fail?: number | null
+          redirects_ok?: number | null
+          unique_sessions?: number | null
+          unique_visitors?: number | null
+          variant_id?: string | null
+        }
+        Update: {
+          assigns?: number | null
+          avg_ttr_ms?: number | null
+          browser?: string | null
+          campaign_id?: string
+          country?: string | null
+          created_at?: string
+          day_ts?: string
+          device?: string | null
+          id?: string
+          lang?: string | null
+          os?: string | null
+          project_id?: string
+          redirects_fail?: number | null
+          redirects_ok?: number | null
+          unique_sessions?: number | null
+          unique_visitors?: number | null
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aggregates_daily_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aggregates_daily_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aggregates_daily_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       aggregates_minute: {
         Row: {
           assigns: number | null

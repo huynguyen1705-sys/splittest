@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, Plus, Settings, Code, BarChart3, Play, Pause, CheckCircle, MoreVertical, Trash2, Pencil, Copy, CheckCircle2, XCircle, Loader2, Globe, Save } from 'lucide-react';
+import { ArrowLeft, Plus, Settings, Code, BarChart3, Play, Pause, CheckCircle, MoreVertical, Trash2, Pencil, Copy, CheckCircle2, XCircle, Loader2, Globe, Save, Download, Archive, HardDrive } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TIMEZONES } from '@/lib/constants';
 import { CampaignStatus } from '@/types/database';
@@ -51,6 +51,9 @@ export default function ProjectDetail() {
   const [deleteProjectDialogOpen, setDeleteProjectDialogOpen] = useState(false);
   const [validateUrl, setValidateUrl] = useState('');
   const [isValidating, setIsValidating] = useState(false);
+  const [isExporting, setIsExporting] = useState<string | null>(null);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
   const [validationResult, setValidationResult] = useState<any>(null);
   
   // Settings edit state
@@ -672,6 +675,159 @@ export default function ProjectDetail() {
                   ) : (
                     <p className="text-muted-foreground">{project.data_retention_days} days</p>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Data Management */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <HardDrive className="w-5 h-5" />
+                  Data Management
+                </CardTitle>
+                <CardDescription>
+                  Export, compress, or clean up your analytics data to reduce storage costs
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Export CSV */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium flex items-center gap-2">
+                    <Download className="w-4 h-4" />
+                    Export CSV Backup
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Download your data as CSV files before archiving
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {(['events_raw', 'aggregates_minute', 'sessions'] as const).map((table) => (
+                      <Button
+                        key={table}
+                        variant="outline"
+                        size="sm"
+                        disabled={isExporting !== null}
+                        onClick={async () => {
+                          setIsExporting(table);
+                          try {
+                            const { data, error } = await supabase.functions.invoke('export-archive', {
+                              body: { action: 'export', projectId: id, table },
+                            });
+                            if (error) throw error;
+                            if (data?.count === 0 || data?.error === 'No data to export') {
+                              toast({ title: 'No data', description: `No ${table} data to export` });
+                              return;
+                            }
+                            // Download as file
+                            const blob = new Blob([data], { type: 'text/csv' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `${table}_${id}_${new Date().toISOString().split('T')[0]}.csv`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                            toast({ title: 'Export complete', description: `${table} exported successfully` });
+                          } catch (error: any) {
+                            toast({ title: 'Export failed', description: error.message, variant: 'destructive' });
+                          } finally {
+                            setIsExporting(null);
+                          }
+                        }}
+                      >
+                        {isExporting === table ? (
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        ) : (
+                          <Download className="w-3 h-3 mr-1" />
+                        )}
+                        {table.replace('_', ' ')}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-border" />
+
+                {/* Compress */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium flex items-center gap-2">
+                    <Archive className="w-4 h-4" />
+                    Compress to Daily Summary
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Compress minute-level aggregates into daily summaries, reducing ~95% of rows while keeping key insights
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isCompressing}
+                    onClick={async () => {
+                      setIsCompressing(true);
+                      try {
+                        const { data, error } = await supabase.functions.invoke('export-archive', {
+                          body: { action: 'compress', projectId: id },
+                        });
+                        if (error) throw error;
+                        toast({
+                          title: 'Compression complete',
+                          description: `${data.minuteRowsProcessed} minute rows → ${data.dailyRowsCreated} daily rows. Deleted ${data.minuteRowsDeleted} old rows.`,
+                        });
+                      } catch (error: any) {
+                        toast({ title: 'Compression failed', description: error.message, variant: 'destructive' });
+                      } finally {
+                        setIsCompressing(false);
+                      }
+                    }}
+                  >
+                    {isCompressing ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Archive className="w-4 h-4 mr-2" />
+                    )}
+                    {isCompressing ? 'Compressing...' : 'Compress Now'}
+                  </Button>
+                </div>
+
+                <div className="border-t border-border" />
+
+                {/* Cleanup old raw data */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium flex items-center gap-2">
+                    <Trash2 className="w-4 h-4 text-destructive" />
+                    Clean Up Old Data
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Delete raw events and sessions older than 7 days. Make sure to export and compress first!
+                  </p>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={isCleaning}
+                    onClick={async () => {
+                      if (!confirm('Are you sure? This will delete events and sessions older than 7 days. Make sure you have exported and compressed first.')) return;
+                      setIsCleaning(true);
+                      try {
+                        const { data, error } = await supabase.functions.invoke('export-archive', {
+                          body: { action: 'cleanup', projectId: id },
+                        });
+                        if (error) throw error;
+                        toast({
+                          title: 'Cleanup complete',
+                          description: `Deleted ${data.eventsDeleted} events and ${data.sessionsDeleted} sessions`,
+                        });
+                      } catch (error: any) {
+                        toast({ title: 'Cleanup failed', description: error.message, variant: 'destructive' });
+                      } finally {
+                        setIsCleaning(false);
+                      }
+                    }}
+                  >
+                    {isCleaning ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4 mr-2" />
+                    )}
+                    {isCleaning ? 'Cleaning...' : 'Clean Up Now'}
+                  </Button>
                 </div>
               </CardContent>
             </Card>

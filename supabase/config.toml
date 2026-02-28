@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.validate-snippet]
 verify_jwt = false
+
+[functions.export-archive]
+verify_jwt = false
