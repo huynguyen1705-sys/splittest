@@ -55,7 +55,7 @@ export default {
       const res = new Response(js, {
         headers: withCors({
           'content-type': 'application/javascript; charset=utf-8',
-          'cache-control': 'public, max-age=3600, s-maxage=3600',
+          'cache-control': 'public, max-age=300, s-maxage=300',
         }),
       });
       ctx.waitUntil(cache.put(cacheKey, res.clone()));
