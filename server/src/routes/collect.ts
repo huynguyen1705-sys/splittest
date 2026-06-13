@@ -203,15 +203,23 @@ r.get('/assign', async (c) => {
             (SELECT row_to_json(r) FROM campaign_rules r WHERE r.campaign_id = c.id) AS rules
      FROM campaigns c
      WHERE c.project_id = $1 AND c.status = 'active'
-     ORDER BY c.priority DESC`,
+     ORDER BY c.priority DESC, c.created_at DESC`,
     [project.id]
   );
 
   if (!campaigns.length) return c.json({ shouldRedirect: false, reason: 'no_active_campaigns' });
 
-  let matched: any = null;
+  // Prefer campaigns with specific path rules over catch-all (paths empty).
+  // Within same specificity, follow ORDER BY priority DESC, created_at DESC.
+  const specific: any[] = [];
+  const catchAll: any[] = [];
   for (const camp of campaigns) {
     if (!camp.variants?.length) continue;
+    if (camp.rules?.include_paths?.length) specific.push(camp);
+    else catchAll.push(camp);
+  }
+  let matched: any = null;
+  for (const camp of [...specific, ...catchAll]) {
     if (matchesRules(camp.rules, ctx)) { matched = camp; break; }
   }
   if (!matched) return c.json({ shouldRedirect: false, reason: 'no_matching_rules' });
