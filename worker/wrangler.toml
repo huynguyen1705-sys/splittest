@@ -1,0 +1,11 @@
+name = "splittest-collector"
+main = "src/index.ts"
+compatibility_date = "2025-01-15"
+workers_dev = true
+
+[vars]
+API_BASE = "https://api.splittest.app"
+
+[[routes]]
+pattern = "collect.splittest.app/*"
+zone_name = "splittest.app"

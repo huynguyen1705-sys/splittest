@@ -1,86 +1,61 @@
 import { useState, useEffect, useCallback } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
+import { authApi, getToken, setToken, User } from '@/lib/api';
+
+// Compat shim — keep the same surface as the old Supabase-based hook
+type Session = { user: User } | null;
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<Session>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-      }
-    );
-
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    const token = getToken();
+    if (!token) { setLoading(false); return; }
+    authApi.me()
+      .then(({ user }) => { setUser(user); setSession({ user }); })
+      .catch(() => { setToken(null); })
+      .finally(() => setLoading(false));
   }, []);
 
   const signUp = useCallback(async (email: string, password: string, fullName?: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName,
-        },
-      },
-    });
-    return { data, error };
+    try {
+      const { token, user } = await authApi.signup(email, password, fullName);
+      setToken(token); setUser(user); setSession({ user });
+      return { data: { user, session: { user } }, error: null };
+    } catch (e: any) {
+      return { data: null, error: { message: e.payload?.error || e.message || 'signup_failed' } };
+    }
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { data, error };
+    try {
+      const { token, user } = await authApi.login(email, password);
+      setToken(token); setUser(user); setSession({ user });
+      return { data: { user, session: { user } }, error: null };
+    } catch (e: any) {
+      return { data: null, error: { message: e.payload?.error || e.message || 'invalid_credentials' } };
+    }
   }, []);
 
+  // OAuth not supported in self-hosted; keep signature returning error
   const signInWithGoogle = useCallback(async () => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/dashboard`,
-      },
-    });
-    return { data, error };
+    return { data: null, error: { message: 'OAuth not supported in self-hosted build' } };
   }, []);
 
   const signOut = useCallback(async () => {
-    const { error } = await supabase.auth.signOut();
-    return { error };
+    setToken(null); setUser(null); setSession(null);
+    return { error: null };
   }, []);
 
   const resetPassword = useCallback(async (email: string) => {
-    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    return { data, error };
+    try {
+      await authApi.forgot(email);
+      return { data: { ok: true }, error: null };
+    } catch (e: any) {
+      return { data: null, error: { message: e.message } };
+    }
   }, []);
 
-  return {
-    user,
-    session,
-    loading,
-    signUp,
-    signIn,
-    signInWithGoogle,
-    signOut,
-    resetPassword,
-  };
+  return { user, session, loading, signUp, signIn, signInWithGoogle, signOut, resetPassword };
 }

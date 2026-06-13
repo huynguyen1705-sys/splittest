@@ -1,397 +1,169 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { AnalyticsData } from '@/types/database';
 
 export type TimeRangePreset = '1h' | '24h' | '7d' | '30d' | 'custom';
 
-export interface DateRange {
-  from: Date;
-  to: Date;
-}
+export interface DateRange { from: Date; to: Date; }
+
+const RANGE_MAP: Record<TimeRangePreset, string> = {
+  '1h': '1h', '24h': '24h', '7d': '7d', '30d': '30d', custom: '24h',
+};
 
 export function useAnalytics(
-  campaignId: string | undefined, 
+  campaignId: string | undefined,
   timeRange: TimeRangePreset = '24h',
   customRange?: DateRange,
   excludeBots: boolean = false
 ) {
-  const queryClient = useQueryClient();
-  
   return useQuery({
     queryKey: ['analytics', campaignId, timeRange, customRange?.from?.toISOString(), customRange?.to?.toISOString(), excludeBots],
     queryFn: async (): Promise<AnalyticsData> => {
       if (!campaignId) throw new Error('Campaign ID required');
+      const range = RANGE_MAP[timeRange] || '24h';
+      const params = new URLSearchParams({ range });
+      if (excludeBots) params.set('excludeBots', '1');
 
-      // Trigger on-demand aggregation (fire-and-forget, don't block UI)
-      supabase.functions.invoke('aggregate-events').catch((err) => {
-        console.warn('On-demand aggregation failed (non-blocking):', err);
-      });
-
-      const now = new Date();
-      let startTime: Date;
-      let endTime: Date = now;
-      
-      if (timeRange === 'custom' && customRange) {
-        startTime = customRange.from;
-        endTime = customRange.to;
-      } else {
-        switch (timeRange) {
-          case '1h':
-            startTime = new Date(now.getTime() - 60 * 60 * 1000);
-            break;
-          case '7d':
-            startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            break;
-          case '30d':
-            startTime = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-            break;
-          default:
-            startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        }
-      }
-
-      // Try aggregates_minute first for efficiency
-      const { data: aggregates, error: aggError } = await supabase
-        .from('aggregates_minute')
-        .select('*')
-        .eq('campaign_id', campaignId)
-        .gte('minute_ts', startTime.toISOString())
-        .order('minute_ts', { ascending: true });
-
-      // Also get raw events for real-time data (last 5 minutes are most likely not aggregated)
-      const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
-      const { data: recentEvents, error: eventsError } = await supabase
-        .from('events_raw')
-        .select('*')
-        .eq('campaign_id', campaignId)
-        .gte('ts', fiveMinutesAgo.toISOString());
-
-      // Fetch sessions data for unique visitors/sessions, UTM attribution, and geo breakdown
-      let sessionsQuery = supabase
-        .from('sessions')
-        .select('id, utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer, visitor_key_hash, is_bot_suspected, session_key, city, region, country, isp, is_mobile, is_proxy, started_at, entry_page, exit_page')
-        .eq('campaign_id', campaignId)
-        .gte('started_at', startTime.toISOString())
-        .lte('started_at', endTime.toISOString());
-      
-      if (excludeBots) {
-        sessionsQuery = sessionsQuery.or('is_bot_suspected.is.null,is_bot_suspected.eq.false');
-      }
-      
-      const { data: sessionsData } = await sessionsQuery;
+      const { aggregates = [], recentEvents = [], sessionsData = [] } =
+        await api.get<{ aggregates: any[]; recentEvents: any[]; sessionsData: any[] }>(
+          `/analytics/full/${campaignId}?${params.toString()}`
+        );
 
       const analytics: AnalyticsData = {
-        totalAssigns: 0,
-        totalRedirectsOk: 0,
-        totalRedirectsFail: 0,
-        avgTimeToRedirect: 0,
-        uniqueVisitors: 0,
-        uniqueSessions: 0,
-        redirectSuccessRate: 0,
-        byVariant: {},
-        byCountry: {},
-        byDevice: {},
-        byBrowser: {},
-        byOS: {},
-        byLang: {},
-        byUtmSource: {},
-        byUtmMedium: {},
-        byUtmCampaign: {},
-        byReferrer: {},
+        totalAssigns: 0, totalRedirectsOk: 0, totalRedirectsFail: 0, avgTimeToRedirect: 0,
+        uniqueVisitors: 0, uniqueSessions: 0, redirectSuccessRate: 0,
+        byVariant: {}, byCountry: {}, byDevice: {}, byBrowser: {}, byOS: {}, byLang: {},
+        byUtmSource: {}, byUtmMedium: {}, byUtmCampaign: {}, byReferrer: {},
         timeSeries: [],
-        // Geo breakdown
-        byCity: [],
-        byRegion: [],
-        byISP: [],
+        byCity: [], byRegion: [], byISP: [],
         networkType: { mobile: 0, fixed: 0 },
         proxyUsage: { proxy: 0, direct: 0 },
-        // Time of day
-        byHour: {},
-        // Entry/Exit pages
-        byEntryPage: [],
-        byExitPage: [],
-        // Traffic sources
+        byHour: {}, byEntryPage: [], byExitPage: [],
         trafficSources: {
-          direct: { sessions: 0, visitors: new Set() as unknown as number },
-          search: { sessions: 0, visitors: new Set() as unknown as number },
-          social: { sessions: 0, visitors: new Set() as unknown as number },
-          referral: { sessions: 0, visitors: new Set() as unknown as number },
-          paid: { sessions: 0, visitors: new Set() as unknown as number },
+          direct: { sessions: 0, visitors: 0 } as any,
+          search: { sessions: 0, visitors: 0 } as any,
+          social: { sessions: 0, visitors: 0 } as any,
+          referral: { sessions: 0, visitors: 0 } as any,
+          paid: { sessions: 0, visitors: 0 } as any,
         },
-        topReferrers: [],
-        heatmapData: {},
+        topReferrers: [], heatmapData: {},
       };
 
-      // Track unique visitors and sessions directly from sessions table (most accurate)
-      const globalVisitorHashes = new Set<string>();
-      const globalSessionKeys = new Set<string>();
-      
-      // Track unique visitors per UTM dimension
+      const visitorSet = new Set<string>();
+      const sessionSet = new Set<string>();
       const utmSourceVisitors: Record<string, Set<string>> = {};
       const utmMediumVisitors: Record<string, Set<string>> = {};
       const utmCampaignVisitors: Record<string, Set<string>> = {};
       const referrerVisitors: Record<string, Set<string>> = {};
-
-      // Geo breakdown tracking
       const cityMap: Record<string, { sessions: number; visitors: Set<string>; country: string }> = {};
       const regionMap: Record<string, { sessions: number; visitors: Set<string>; country: string }> = {};
       const ispMap: Record<string, { sessions: number; isMobile: boolean }> = {};
-      const hourMap: Record<number, number> = {}; // hour -> count
-      const heatmapMap: Record<number, Record<number, number>> = {}; // day -> hour -> count
+      const hourMap: Record<number, number> = {};
+      const heatmapMap: Record<number, Record<number, number>> = {};
       const entryPageMap: Record<string, { sessions: number; visitors: Set<string> }> = {};
       const exitPageMap: Record<string, { sessions: number; visitors: Set<string> }> = {};
-      // Traffic source tracking
-      const trafficSourceVisitors = {
-        direct: new Set<string>(),
-        search: new Set<string>(),
-        social: new Set<string>(),
-        referral: new Set<string>(),
-        paid: new Set<string>(),
-      };
+      const trafficSourceVisitors = { direct: new Set<string>(), search: new Set<string>(), social: new Set<string>(), referral: new Set<string>(), paid: new Set<string>() };
       const trafficSourceSessions = { direct: 0, search: 0, social: 0, referral: 0, paid: 0 };
       const referrerDetailMap: Record<string, { sessions: number; visitors: Set<string>; category: string }> = {};
-      let mobileCount = 0;
-      let fixedCount = 0;
-      let proxyCount = 0;
-      let directCount = 0;
+      let mobileCount = 0, fixedCount = 0, proxyCount = 0, directCount = 0;
 
-      // Process sessions data - calculate global unique visitors/sessions AND UTM attribution
-      (sessionsData || []).forEach((session) => {
-        const visitorHash = session.visitor_key_hash || '';
-        const sessionKey = session.session_key || session.id;
-        
-        // Track global unique visitors and sessions
-        if (visitorHash) globalVisitorHashes.add(visitorHash);
-        if (sessionKey) globalSessionKeys.add(sessionKey);
-
-        // Geo breakdown
-        if (session.city) {
-          const cityKey = `${session.city}|${session.country || 'Unknown'}`;
-          if (!cityMap[cityKey]) {
-            cityMap[cityKey] = { sessions: 0, visitors: new Set(), country: session.country || 'Unknown' };
-          }
-          cityMap[cityKey].sessions++;
-          if (visitorHash) cityMap[cityKey].visitors.add(visitorHash);
+      const categorizeReferrer = (referrer: string | null, utmSource: string | null, utmMedium: string | null, gclid: string | null, fbclid: string | null) => {
+        if (gclid || fbclid || utmMedium === 'cpc' || utmMedium === 'ppc' || utmMedium === 'paid') {
+          return { category: 'paid', domain: utmSource || (gclid ? 'google' : fbclid ? 'facebook' : 'paid') };
         }
+        if (!referrer) return { category: 'direct', domain: 'Direct' };
+        let domain: string;
+        try { domain = new URL(referrer).hostname.replace('www.', ''); } catch { domain = referrer; }
+        const se = ['google','bing','yahoo','duckduckgo','baidu','yandex','ecosia','ask','aol'];
+        if (se.some(s => domain.includes(s))) return { category: 'search', domain };
+        const sn = ['facebook','twitter','instagram','linkedin','pinterest','tiktok','reddit','youtube','snapchat','whatsapp','t.co','fb.com','lnkd.in'];
+        if (sn.some(s => domain.includes(s))) return { category: 'social', domain };
+        return { category: 'referral', domain };
+      };
 
-        if (session.region) {
-          const regionKey = `${session.region}|${session.country || 'Unknown'}`;
-          if (!regionMap[regionKey]) {
-            regionMap[regionKey] = { sessions: 0, visitors: new Set(), country: session.country || 'Unknown' };
-          }
-          regionMap[regionKey].sessions++;
-          if (visitorHash) regionMap[regionKey].visitors.add(visitorHash);
+      sessionsData.forEach((s: any) => {
+        const vh = s.visitor_key_hash || '';
+        const sk = s.session_key || s.id;
+        if (vh) visitorSet.add(vh);
+        if (sk) sessionSet.add(sk);
+
+        if (s.city) {
+          const k = `${s.city}|${s.country || 'Unknown'}`;
+          if (!cityMap[k]) cityMap[k] = { sessions: 0, visitors: new Set(), country: s.country || 'Unknown' };
+          cityMap[k].sessions++; if (vh) cityMap[k].visitors.add(vh);
         }
-
-        if (session.isp) {
-          if (!ispMap[session.isp]) {
-            ispMap[session.isp] = { sessions: 0, isMobile: session.is_mobile || false };
-          }
-          ispMap[session.isp].sessions++;
+        if (s.region) {
+          const k = `${s.region}|${s.country || 'Unknown'}`;
+          if (!regionMap[k]) regionMap[k] = { sessions: 0, visitors: new Set(), country: s.country || 'Unknown' };
+          regionMap[k].sessions++; if (vh) regionMap[k].visitors.add(vh);
         }
-
-        // Network type
-        if (session.is_mobile) {
-          mobileCount++;
-        } else {
-          fixedCount++;
+        if (s.isp) {
+          if (!ispMap[s.isp]) ispMap[s.isp] = { sessions: 0, isMobile: s.is_mobile || false };
+          ispMap[s.isp].sessions++;
         }
-
-        // Proxy usage
-        if (session.is_proxy) {
-          proxyCount++;
-        } else {
-          directCount++;
+        if (s.is_mobile) mobileCount++; else fixedCount++;
+        if (s.is_proxy) proxyCount++; else directCount++;
+        if (s.started_at) {
+          const dt = new Date(s.started_at);
+          const h = dt.getHours(); const dow = dt.getDay();
+          hourMap[h] = (hourMap[h] || 0) + 1;
+          if (!heatmapMap[dow]) heatmapMap[dow] = {};
+          heatmapMap[dow][h] = (heatmapMap[dow][h] || 0) + 1;
         }
-
-        // Time of day analysis
-        if (session.started_at) {
-          const date = new Date(session.started_at);
-          const hour = date.getHours();
-          const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
-          
-          hourMap[hour] = (hourMap[hour] || 0) + 1;
-          
-          // Heatmap data
-          if (!heatmapMap[dayOfWeek]) {
-            heatmapMap[dayOfWeek] = {};
-          }
-          heatmapMap[dayOfWeek][hour] = (heatmapMap[dayOfWeek][hour] || 0) + 1;
+        if (s.entry_page) {
+          if (!entryPageMap[s.entry_page]) entryPageMap[s.entry_page] = { sessions: 0, visitors: new Set() };
+          entryPageMap[s.entry_page].sessions++; if (vh) entryPageMap[s.entry_page].visitors.add(vh);
         }
-
-        // Entry page tracking
-        if (session.entry_page) {
-          if (!entryPageMap[session.entry_page]) {
-            entryPageMap[session.entry_page] = { sessions: 0, visitors: new Set() };
-          }
-          entryPageMap[session.entry_page].sessions++;
-          if (visitorHash) entryPageMap[session.entry_page].visitors.add(visitorHash);
+        if (s.exit_page) {
+          if (!exitPageMap[s.exit_page]) exitPageMap[s.exit_page] = { sessions: 0, visitors: new Set() };
+          exitPageMap[s.exit_page].sessions++; if (vh) exitPageMap[s.exit_page].visitors.add(vh);
         }
-
-        // Exit page tracking
-        if (session.exit_page) {
-          if (!exitPageMap[session.exit_page]) {
-            exitPageMap[session.exit_page] = { sessions: 0, visitors: new Set() };
-          }
-          exitPageMap[session.exit_page].sessions++;
-          if (visitorHash) exitPageMap[session.exit_page].visitors.add(visitorHash);
-        }
-
-        // Traffic source categorization
-        const categorizeReferrer = (referrer: string | null, utmSource: string | null, utmMedium: string | null, gclid: string | null, fbclid: string | null): { category: string; domain: string } => {
-          // Paid traffic detection
-          if (gclid || fbclid || utmMedium === 'cpc' || utmMedium === 'ppc' || utmMedium === 'paid') {
-            return { category: 'paid', domain: utmSource || (gclid ? 'google' : fbclid ? 'facebook' : 'paid') };
-          }
-
-          if (!referrer) {
-            return { category: 'direct', domain: 'Direct' };
-          }
-
-          let domain: string;
-          try {
-            domain = new URL(referrer).hostname.replace('www.', '');
-          } catch {
-            domain = referrer;
-          }
-
-          // Search engines
-          const searchEngines = ['google', 'bing', 'yahoo', 'duckduckgo', 'baidu', 'yandex', 'ecosia', 'ask', 'aol'];
-          if (searchEngines.some(se => domain.includes(se))) {
-            return { category: 'search', domain };
-          }
-
-          // Social media
-          const socialNetworks = ['facebook', 'twitter', 'instagram', 'linkedin', 'pinterest', 'tiktok', 'reddit', 'youtube', 'snapchat', 'whatsapp', 't.co', 'fb.com', 'lnkd.in'];
-          if (socialNetworks.some(sn => domain.includes(sn))) {
-            return { category: 'social', domain };
-          }
-
-          return { category: 'referral', domain };
-        };
-
-        const { category, domain } = categorizeReferrer(session.referrer, session.utm_source, session.utm_medium, session.gclid, session.fbclid);
-        
-        // Track traffic source category
+        const { category, domain } = categorizeReferrer(s.referrer, s.utm_source, s.utm_medium, s.gclid, s.fbclid);
         trafficSourceSessions[category as keyof typeof trafficSourceSessions]++;
-        if (visitorHash) {
-          trafficSourceVisitors[category as keyof typeof trafficSourceVisitors].add(visitorHash);
-        }
-
-        // Track detailed referrer
+        if (vh) trafficSourceVisitors[category as keyof typeof trafficSourceVisitors].add(vh);
         if (domain && domain !== 'Direct') {
-          if (!referrerDetailMap[domain]) {
-            referrerDetailMap[domain] = { sessions: 0, visitors: new Set(), category };
-          }
-          referrerDetailMap[domain].sessions++;
-          if (visitorHash) referrerDetailMap[domain].visitors.add(visitorHash);
+          if (!referrerDetailMap[domain]) referrerDetailMap[domain] = { sessions: 0, visitors: new Set(), category };
+          referrerDetailMap[domain].sessions++; if (vh) referrerDetailMap[domain].visitors.add(vh);
         }
-        
-        // Determine UTM source
-        let source = session.utm_source;
-        if (!source && session.gclid) source = 'google';
-        if (!source && session.fbclid) source = 'facebook';
-        
+
+        let source = s.utm_source;
+        if (!source && s.gclid) source = 'google';
+        if (!source && s.fbclid) source = 'facebook';
         if (source) {
-          if (!analytics.byUtmSource[source]) {
-            analytics.byUtmSource[source] = { sessions: 0, uniqueVisitors: 0 };
-            utmSourceVisitors[source] = new Set();
-          }
-          analytics.byUtmSource[source].sessions += 1;
-          if (visitorHash) utmSourceVisitors[source].add(visitorHash);
+          if (!analytics.byUtmSource[source]) { analytics.byUtmSource[source] = { sessions: 0, uniqueVisitors: 0 }; utmSourceVisitors[source] = new Set(); }
+          analytics.byUtmSource[source].sessions++; if (vh) utmSourceVisitors[source].add(vh);
         }
-        
-        if (session.utm_medium) {
-          if (!analytics.byUtmMedium[session.utm_medium]) {
-            analytics.byUtmMedium[session.utm_medium] = { sessions: 0, uniqueVisitors: 0 };
-            utmMediumVisitors[session.utm_medium] = new Set();
-          }
-          analytics.byUtmMedium[session.utm_medium].sessions += 1;
-          if (visitorHash) utmMediumVisitors[session.utm_medium].add(visitorHash);
+        if (s.utm_medium) {
+          if (!analytics.byUtmMedium[s.utm_medium]) { analytics.byUtmMedium[s.utm_medium] = { sessions: 0, uniqueVisitors: 0 }; utmMediumVisitors[s.utm_medium] = new Set(); }
+          analytics.byUtmMedium[s.utm_medium].sessions++; if (vh) utmMediumVisitors[s.utm_medium].add(vh);
         }
-        
-        if (session.utm_campaign) {
-          if (!analytics.byUtmCampaign[session.utm_campaign]) {
-            analytics.byUtmCampaign[session.utm_campaign] = { sessions: 0, uniqueVisitors: 0 };
-            utmCampaignVisitors[session.utm_campaign] = new Set();
-          }
-          analytics.byUtmCampaign[session.utm_campaign].sessions += 1;
-          if (visitorHash) utmCampaignVisitors[session.utm_campaign].add(visitorHash);
+        if (s.utm_campaign) {
+          if (!analytics.byUtmCampaign[s.utm_campaign]) { analytics.byUtmCampaign[s.utm_campaign] = { sessions: 0, uniqueVisitors: 0 }; utmCampaignVisitors[s.utm_campaign] = new Set(); }
+          analytics.byUtmCampaign[s.utm_campaign].sessions++; if (vh) utmCampaignVisitors[s.utm_campaign].add(vh);
         }
-        
-        if (session.referrer) {
-          let refDomain: string;
-          try {
-            refDomain = new URL(session.referrer).hostname.replace('www.', '');
-          } catch {
-            refDomain = session.referrer;
-          }
-          if (!analytics.byReferrer[refDomain]) {
-            analytics.byReferrer[refDomain] = { sessions: 0, uniqueVisitors: 0 };
-            referrerVisitors[refDomain] = new Set();
-          }
-          analytics.byReferrer[refDomain].sessions += 1;
-          if (visitorHash) referrerVisitors[refDomain].add(visitorHash);
+        if (s.referrer) {
+          let rd: string; try { rd = new URL(s.referrer).hostname.replace('www.', ''); } catch { rd = s.referrer; }
+          if (!analytics.byReferrer[rd]) { analytics.byReferrer[rd] = { sessions: 0, uniqueVisitors: 0 }; referrerVisitors[rd] = new Set(); }
+          analytics.byReferrer[rd].sessions++; if (vh) referrerVisitors[rd].add(vh);
         }
       });
-      
-      // Set global unique counts from sessions table (most accurate source of truth)
-      analytics.uniqueVisitors = globalVisitorHashes.size;
-      analytics.uniqueSessions = globalSessionKeys.size;
 
-      // Calculate unique visitors counts
-      Object.keys(utmSourceVisitors).forEach(key => {
-        analytics.byUtmSource[key].uniqueVisitors = utmSourceVisitors[key].size;
-      });
-      Object.keys(utmMediumVisitors).forEach(key => {
-        analytics.byUtmMedium[key].uniqueVisitors = utmMediumVisitors[key].size;
-      });
-      Object.keys(utmCampaignVisitors).forEach(key => {
-        analytics.byUtmCampaign[key].uniqueVisitors = utmCampaignVisitors[key].size;
-      });
-      Object.keys(referrerVisitors).forEach(key => {
-        analytics.byReferrer[key].uniqueVisitors = referrerVisitors[key].size;
-      });
+      analytics.uniqueVisitors = visitorSet.size;
+      analytics.uniqueSessions = sessionSet.size;
+      Object.keys(utmSourceVisitors).forEach(k => analytics.byUtmSource[k].uniqueVisitors = utmSourceVisitors[k].size);
+      Object.keys(utmMediumVisitors).forEach(k => analytics.byUtmMedium[k].uniqueVisitors = utmMediumVisitors[k].size);
+      Object.keys(utmCampaignVisitors).forEach(k => analytics.byUtmCampaign[k].uniqueVisitors = utmCampaignVisitors[k].size);
+      Object.keys(referrerVisitors).forEach(k => analytics.byReferrer[k].uniqueVisitors = referrerVisitors[k].size);
 
-      // Build geo breakdown arrays (sorted by sessions desc)
-      analytics.byCity = Object.entries(cityMap)
-        .map(([key, data]) => {
-          const [name] = key.split('|');
-          return { name, country: data.country, sessions: data.sessions, visitors: data.visitors.size };
-        })
-        .sort((a, b) => b.sessions - a.sessions)
-        .slice(0, 15);
-
-      analytics.byRegion = Object.entries(regionMap)
-        .map(([key, data]) => {
-          const [name] = key.split('|');
-          return { name, country: data.country, sessions: data.sessions, visitors: data.visitors.size };
-        })
-        .sort((a, b) => b.sessions - a.sessions)
-        .slice(0, 15);
-
-      analytics.byISP = Object.entries(ispMap)
-        .map(([isp, data]) => ({ isp, sessions: data.sessions, isMobile: data.isMobile }))
-        .sort((a, b) => b.sessions - a.sessions)
-        .slice(0, 10);
-
+      analytics.byCity = Object.entries(cityMap).map(([k, d]) => { const [name] = k.split('|'); return { name, country: d.country, sessions: d.sessions, visitors: d.visitors.size }; }).sort((a, b) => b.sessions - a.sessions).slice(0, 15);
+      analytics.byRegion = Object.entries(regionMap).map(([k, d]) => { const [name] = k.split('|'); return { name, country: d.country, sessions: d.sessions, visitors: d.visitors.size }; }).sort((a, b) => b.sessions - a.sessions).slice(0, 15);
+      analytics.byISP = Object.entries(ispMap).map(([isp, d]) => ({ isp, sessions: d.sessions, isMobile: d.isMobile })).sort((a, b) => b.sessions - a.sessions).slice(0, 10);
       analytics.networkType = { mobile: mobileCount, fixed: fixedCount };
       analytics.proxyUsage = { proxy: proxyCount, direct: directCount };
       analytics.byHour = hourMap;
-
-      // Build entry/exit page arrays
-      analytics.byEntryPage = Object.entries(entryPageMap)
-        .map(([path, data]) => ({ path, sessions: data.sessions, visitors: data.visitors.size }))
-        .sort((a, b) => b.sessions - a.sessions)
-        .slice(0, 15);
-
-      analytics.byExitPage = Object.entries(exitPageMap)
-        .map(([path, data]) => ({ path, sessions: data.sessions, visitors: data.visitors.size }))
-        .sort((a, b) => b.sessions - a.sessions)
-        .slice(0, 15);
-
-      // Build traffic sources summary
+      analytics.byEntryPage = Object.entries(entryPageMap).map(([path, d]) => ({ path, sessions: d.sessions, visitors: d.visitors.size })).sort((a, b) => b.sessions - a.sessions).slice(0, 15);
+      analytics.byExitPage = Object.entries(exitPageMap).map(([path, d]) => ({ path, sessions: d.sessions, visitors: d.visitors.size })).sort((a, b) => b.sessions - a.sessions).slice(0, 15);
       analytics.trafficSources = {
         direct: { sessions: trafficSourceSessions.direct, visitors: trafficSourceVisitors.direct.size },
         search: { sessions: trafficSourceSessions.search, visitors: trafficSourceVisitors.search.size },
@@ -399,233 +171,113 @@ export function useAnalytics(
         referral: { sessions: trafficSourceSessions.referral, visitors: trafficSourceVisitors.referral.size },
         paid: { sessions: trafficSourceSessions.paid, visitors: trafficSourceVisitors.paid.size },
       };
-
-      analytics.topReferrers = Object.entries(referrerDetailMap)
-        .map(([domain, data]) => ({ domain, sessions: data.sessions, visitors: data.visitors.size, category: data.category }))
-        .sort((a, b) => b.sessions - a.sessions)
-        .slice(0, 15);
-
+      analytics.topReferrers = Object.entries(referrerDetailMap).map(([domain, d]) => ({ domain, sessions: d.sessions, visitors: d.visitors.size, category: d.category })).sort((a, b) => b.sessions - a.sessions).slice(0, 15);
       analytics.heatmapData = heatmapMap;
 
-      let totalTTR = 0;
-      let ttrCount = 0;
-      const timeSeriesMap = new Map<string, { assigns: number; redirectsOk: number; uniqueVisitors: number }>();
-      const processedMinutes = new Set<string>();
+      let totalTTR = 0, ttrCount = 0;
+      const tsMap = new Map<string, { assigns: number; redirectsOk: number; uniqueVisitors: number }>();
 
-      // Process aggregates (exclude last 5 minutes to avoid double counting)
-      (aggregates || []).forEach((agg) => {
-        const aggMinute = agg.minute_ts.slice(0, 16);
-        if (new Date(agg.minute_ts) >= fiveMinutesAgo) {
-          // Skip recent data - we'll get it from raw events
-          return;
-        }
-        
-        processedMinutes.add(aggMinute);
-        
-        // Sum up totals (event counts, NOT unique counts - those come from sessions table)
+      aggregates.forEach((agg: any) => {
         analytics.totalAssigns += agg.assigns || 0;
         analytics.totalRedirectsOk += agg.redirects_ok || 0;
         analytics.totalRedirectsFail += agg.redirects_fail || 0;
-
-        // Track TTR for weighted average
-        if (agg.avg_ttr_ms && agg.redirects_ok) {
-          totalTTR += agg.avg_ttr_ms * agg.redirects_ok;
-          ttrCount += agg.redirects_ok;
-        }
-
-        // By variant
+        if (agg.avg_ttr_ms && agg.redirects_ok) { totalTTR += agg.avg_ttr_ms * agg.redirects_ok; ttrCount += agg.redirects_ok; }
         if (agg.variant_id) {
-          if (!analytics.byVariant[agg.variant_id]) {
-            analytics.byVariant[agg.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0, uniqueVisitors: 0 };
-          }
-          analytics.byVariant[agg.variant_id].assigns += agg.assigns || 0;
-          analytics.byVariant[agg.variant_id].redirectsOk += agg.redirects_ok || 0;
-          analytics.byVariant[agg.variant_id].redirectsFail += agg.redirects_fail || 0;
-          analytics.byVariant[agg.variant_id].uniqueVisitors += agg.unique_visitors || 0;
+          const v = analytics.byVariant[agg.variant_id] ||= { assigns: 0, redirectsOk: 0, redirectsFail: 0, uniqueVisitors: 0 };
+          v.assigns += agg.assigns || 0; v.redirectsOk += agg.redirects_ok || 0; v.redirectsFail += agg.redirects_fail || 0; v.uniqueVisitors += agg.unique_visitors || 0;
         }
-
-        // By dimensions (counting assigns)
-        const assigns = agg.assigns || 0;
-        if (agg.country && assigns > 0) {
-          analytics.byCountry[agg.country] = (analytics.byCountry[agg.country] || 0) + assigns;
-        }
-        if (agg.device && assigns > 0) {
-          analytics.byDevice[agg.device] = (analytics.byDevice[agg.device] || 0) + assigns;
-        }
-        if (agg.browser && assigns > 0) {
-          analytics.byBrowser[agg.browser] = (analytics.byBrowser[agg.browser] || 0) + assigns;
-        }
-        if (agg.os && assigns > 0) {
-          analytics.byOS[agg.os] = (analytics.byOS[agg.os] || 0) + assigns;
-        }
-        if (agg.lang && assigns > 0) {
-          analytics.byLang[agg.lang] = (analytics.byLang[agg.lang] || 0) + assigns;
-        }
-
-        // Time series
-        const tsKey = timeRange === '1h' 
-          ? agg.minute_ts.slice(0, 16)
-          : agg.minute_ts.slice(0, 13);
-        
-        if (!timeSeriesMap.has(tsKey)) {
-          timeSeriesMap.set(tsKey, { assigns: 0, redirectsOk: 0, uniqueVisitors: 0 });
-        }
-        const ts = timeSeriesMap.get(tsKey)!;
-        ts.assigns += agg.assigns || 0;
-        ts.redirectsOk += agg.redirects_ok || 0;
-        ts.uniqueVisitors += agg.unique_visitors || 0;
+        const a = agg.assigns || 0;
+        if (agg.country && a > 0) analytics.byCountry[agg.country] = (analytics.byCountry[agg.country] || 0) + a;
+        if (agg.device && a > 0) analytics.byDevice[agg.device] = (analytics.byDevice[agg.device] || 0) + a;
+        if (agg.browser && a > 0) analytics.byBrowser[agg.browser] = (analytics.byBrowser[agg.browser] || 0) + a;
+        if (agg.os && a > 0) analytics.byOS[agg.os] = (analytics.byOS[agg.os] || 0) + a;
+        if (agg.lang && a > 0) analytics.byLang[agg.lang] = (analytics.byLang[agg.lang] || 0) + a;
+        const tsKey = timeRange === '1h' ? agg.minute_ts.slice(0, 16) : agg.minute_ts.slice(0, 13);
+        const ts = tsMap.get(tsKey) || { assigns: 0, redirectsOk: 0, uniqueVisitors: 0 }; tsMap.set(tsKey, ts);
+        ts.assigns += agg.assigns || 0; ts.redirectsOk += agg.redirects_ok || 0; ts.uniqueVisitors += agg.unique_visitors || 0;
       });
 
-      // Process recent raw events (for real-time display - event counts only, unique counts already from sessions)
-      (recentEvents || []).forEach((event) => {
-        switch (event.event_type) {
+      recentEvents.forEach((ev: any) => {
+        switch (ev.event_type) {
           case 'assign':
-            analytics.totalAssigns += 1;
-            if (event.variant_id) {
-              if (!analytics.byVariant[event.variant_id]) {
-                analytics.byVariant[event.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0, uniqueVisitors: 0 };
-              }
-              analytics.byVariant[event.variant_id].assigns += 1;
-            }
-            if (event.country) analytics.byCountry[event.country] = (analytics.byCountry[event.country] || 0) + 1;
-            if (event.device) analytics.byDevice[event.device] = (analytics.byDevice[event.device] || 0) + 1;
-            if (event.browser) analytics.byBrowser[event.browser] = (analytics.byBrowser[event.browser] || 0) + 1;
-            if (event.os) analytics.byOS[event.os] = (analytics.byOS[event.os] || 0) + 1;
-            if (event.lang) analytics.byLang[event.lang] = (analytics.byLang[event.lang] || 0) + 1;
+            analytics.totalAssigns++;
+            if (ev.variant_id) { const v = analytics.byVariant[ev.variant_id] ||= { assigns: 0, redirectsOk: 0, redirectsFail: 0, uniqueVisitors: 0 }; v.assigns++; }
+            if (ev.country) analytics.byCountry[ev.country] = (analytics.byCountry[ev.country] || 0) + 1;
+            if (ev.device) analytics.byDevice[ev.device] = (analytics.byDevice[ev.device] || 0) + 1;
+            if (ev.browser) analytics.byBrowser[ev.browser] = (analytics.byBrowser[ev.browser] || 0) + 1;
+            if (ev.os) analytics.byOS[ev.os] = (analytics.byOS[ev.os] || 0) + 1;
+            if (ev.lang) analytics.byLang[ev.lang] = (analytics.byLang[ev.lang] || 0) + 1;
             break;
           case 'redirect_ok':
-            analytics.totalRedirectsOk += 1;
-            if (event.variant_id) {
-              if (!analytics.byVariant[event.variant_id]) {
-                analytics.byVariant[event.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0, uniqueVisitors: 0 };
-              }
-              analytics.byVariant[event.variant_id].redirectsOk += 1;
-            }
-            if (event.time_to_redirect_ms) {
-              totalTTR += event.time_to_redirect_ms;
-              ttrCount += 1;
-            }
+            analytics.totalRedirectsOk++;
+            if (ev.variant_id) { const v = analytics.byVariant[ev.variant_id] ||= { assigns: 0, redirectsOk: 0, redirectsFail: 0, uniqueVisitors: 0 }; v.redirectsOk++; }
+            if (ev.time_to_redirect_ms) { totalTTR += ev.time_to_redirect_ms; ttrCount++; }
             break;
           case 'redirect_fail':
-            analytics.totalRedirectsFail += 1;
-            if (event.variant_id) {
-              if (!analytics.byVariant[event.variant_id]) {
-                analytics.byVariant[event.variant_id] = { assigns: 0, redirectsOk: 0, redirectsFail: 0, uniqueVisitors: 0 };
-              }
-              analytics.byVariant[event.variant_id].redirectsFail += 1;
-            }
+            analytics.totalRedirectsFail++;
+            if (ev.variant_id) { const v = analytics.byVariant[ev.variant_id] ||= { assigns: 0, redirectsOk: 0, redirectsFail: 0, uniqueVisitors: 0 }; v.redirectsFail++; }
             break;
         }
-
-        // Add to time series
-        const tsKey = timeRange === '1h' 
-          ? event.ts.slice(0, 16)
-          : event.ts.slice(0, 13);
-        
-        if (!timeSeriesMap.has(tsKey)) {
-          timeSeriesMap.set(tsKey, { assigns: 0, redirectsOk: 0, uniqueVisitors: 0 });
-        }
-        const ts = timeSeriesMap.get(tsKey)!;
-        if (event.event_type === 'assign') ts.assigns += 1;
-        if (event.event_type === 'redirect_ok') ts.redirectsOk += 1;
+        const tsKey = timeRange === '1h' ? ev.ts.slice(0, 16) : ev.ts.slice(0, 13);
+        const ts = tsMap.get(tsKey) || { assigns: 0, redirectsOk: 0, uniqueVisitors: 0 }; tsMap.set(tsKey, ts);
+        if (ev.event_type === 'assign') ts.assigns++;
+        if (ev.event_type === 'redirect_ok') ts.redirectsOk++;
       });
 
-      // Calculate redirect success rate
       const totalRedirects = analytics.totalRedirectsOk + analytics.totalRedirectsFail;
-      analytics.redirectSuccessRate = totalRedirects > 0 
-        ? Math.round((analytics.totalRedirectsOk / totalRedirects) * 100) 
-        : 0;
-
+      analytics.redirectSuccessRate = totalRedirects > 0 ? Math.round((analytics.totalRedirectsOk / totalRedirects) * 100) : 0;
       analytics.avgTimeToRedirect = ttrCount > 0 ? Math.round(totalTTR / ttrCount) : 0;
-      analytics.timeSeries = Array.from(timeSeriesMap.entries())
-        .map(([ts, data]) => ({ ts, ...data }))
-        .sort((a, b) => a.ts.localeCompare(b.ts));
+      analytics.timeSeries = Array.from(tsMap.entries()).map(([ts, d]) => ({ ts, ...d })).sort((a, b) => a.ts.localeCompare(b.ts));
 
       return analytics;
     },
     enabled: !!campaignId,
-    refetchInterval: 10000, // Refresh every 10 seconds for more real-time feel
+    refetchInterval: 10000,
   });
 }
 
+// Realtime events: poll every 5s (no websocket — keep simple)
 export function useRealtimeEvents(campaignId: string | undefined) {
-  const [events, setEvents] = useState<Array<{
-    id: string;
-    event_type: string;
-    ts: string;
-    country: string | null;
-    device: string | null;
-    browser: string | null;
-    variant_id: string | null;
-    session_id: string | null;
-  }>>([]);
+  const [events, setEvents] = useState<Array<{ id: string; event_type: string; ts: string; country: string | null; device: string | null; browser: string | null; variant_id: string | null; session_id: string | null }>>([]);
   const [newEventCount, setNewEventCount] = useState(0);
   const [lastEventTime, setLastEventTime] = useState<Date | null>(null);
   const [isLive, setIsLive] = useState(false);
-  const queryClient = useQueryClient();
+  const qc = useQueryClient();
 
-  // Reset new event count after 3 seconds
   useEffect(() => {
     if (newEventCount > 0) {
-      const timer = setTimeout(() => setNewEventCount(0), 3000);
-      return () => clearTimeout(timer);
+      const t = setTimeout(() => setNewEventCount(0), 3000);
+      return () => clearTimeout(t);
     }
   }, [newEventCount]);
 
   useEffect(() => {
     if (!campaignId) return;
+    let lastSeenId: string | null = null;
+    let alive = true;
 
-    // Real-time events still need events_raw for live data
-    const windowMs = 10 * 60 * 1000; // 10 minutes
-    const fetchRecent = async () => {
-      const since = new Date(Date.now() - windowMs).toISOString();
-      const { data } = await supabase
-        .from('events_raw')
-        .select('id, event_type, ts, country, device, browser, variant_id, session_id')
-        .eq('campaign_id', campaignId)
-        .gte('ts', since)
-        .order('ts', { ascending: false })
-        .limit(200);
-      
-      if (data) {
+    const poll = async () => {
+      try {
+        const { data } = await api.get<{ data: any[] }>(`/analytics/realtime/${campaignId}`);
+        if (!alive) return;
         setEvents(data);
-        if (data.length > 0) {
+        if (data.length) {
           setLastEventTime(new Date(data[0].ts));
+          if (lastSeenId && data[0].id !== lastSeenId) {
+            const newCount = data.findIndex(e => e.id === lastSeenId);
+            setNewEventCount(prev => prev + (newCount > 0 ? newCount : 1));
+            qc.invalidateQueries({ queryKey: ['analytics', campaignId] });
+          }
+          lastSeenId = data[0].id;
         }
-      }
-    };
-
-    fetchRecent();
-
-    const channel = supabase
-      .channel(`events-${campaignId}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'events_raw',
-        filter: `campaign_id=eq.${campaignId}`,
-      }, (payload) => {
-        const newEvent = payload.new as typeof events[0];
-        setEvents((prev) => {
-          const cutoff = Date.now() - windowMs;
-          return [newEvent, ...prev].filter((e) => new Date(e.ts).getTime() > cutoff).slice(0, 300);
-        });
-        setNewEventCount(prev => prev + 1);
-        setLastEventTime(new Date(newEvent.ts));
         setIsLive(true);
-        
-        // Invalidate analytics to refresh stats
-        queryClient.invalidateQueries({ queryKey: ['analytics', campaignId] });
-      })
-      .subscribe((status) => {
-        setIsLive(status === 'SUBSCRIBED');
-      });
-
-    return () => { 
-      supabase.removeChannel(channel);
-      setIsLive(false);
+      } catch { setIsLive(false); }
     };
-  }, [campaignId, queryClient]);
+
+    poll();
+    const itv = setInterval(poll, 5000);
+    return () => { alive = false; clearInterval(itv); setIsLive(false); };
+  }, [campaignId, qc]);
 
   return { events, newEventCount, lastEventTime, isLive };
 }

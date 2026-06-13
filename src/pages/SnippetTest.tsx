@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Play, CheckCircle2, XCircle, Loader2, RefreshCw } from 'lucide-react';
 
-const EDGE_API = 'https://clgztmdjppmbkcfdtxhw.supabase.co/functions/v1';
+const EDGE_API = 'https://collect.splittest.app';
 
 interface AssignResponse {
   shouldRedirect?: boolean;
@@ -58,7 +58,7 @@ export default function SnippetTest() {
     const startTime = Date.now();
     
     try {
-      const url = `${EDGE_API}/edge-assign?token=${encodeURIComponent(token)}&vk=${encodeURIComponent(visitorKey)}&path=${encodeURIComponent(path)}&lang=${encodeURIComponent(lang)}`;
+      const url = `${EDGE_API}/assign?token=${encodeURIComponent(token)}&vk=${encodeURIComponent(visitorKey)}&path=${encodeURIComponent(path)}&lang=${encodeURIComponent(lang)}`;
       
       const response = await fetch(url);
       const data: AssignResponse = await response.json();
