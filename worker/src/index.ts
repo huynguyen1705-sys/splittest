@@ -64,7 +64,7 @@ export default {
 
     // ---- proxy to API ----
     if (url.pathname === '/assign' || url.pathname === '/event' || url.pathname === '/validate') {
-      const apiUrl = env.API_BASE.replace(/\/$/, '') + url.pathname + url.search;
+      const apiUrl = env.API_BASE.replace(/\/$/, '') + '/collect' + url.pathname + url.search;
       const cf = (req as any).cf || {};
 
       const fwdHeaders = new Headers(req.headers);
