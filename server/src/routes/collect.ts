@@ -8,6 +8,37 @@ import { query, one, pool } from '../db.js';
 
 const r = new Hono();
 
+// ============== in-memory caches (10-30s TTL) ==============
+const projectCache = new Map<string, { project: { id: string; primary_domain: string }; exp: number }>();
+const campaignsCache = new Map<string, { campaigns: any[]; exp: number }>();
+const PROJECT_TTL = 60_000; // 60s — project rarely changes
+const CAMPAIGN_TTL = 15_000; // 15s — fast propagation of rule changes
+
+function getCachedProject(token: string) {
+  const c = projectCache.get(token);
+  if (c && c.exp > Date.now()) return c.project;
+  return null;
+}
+function setCachedProject(token: string, project: { id: string; primary_domain: string }) {
+  projectCache.set(token, { project, exp: Date.now() + PROJECT_TTL });
+  if (projectCache.size > 500) {
+    // simple LRU-ish trim
+    const now = Date.now();
+    for (const [k, v] of projectCache) if (v.exp < now) projectCache.delete(k);
+  }
+}
+function getCachedCampaigns(projectId: string) {
+  const c = campaignsCache.get(projectId);
+  if (c && c.exp > Date.now()) return c.campaigns;
+  return null;
+}
+function setCachedCampaigns(projectId: string, campaigns: any[]) {
+  campaignsCache.set(projectId, { campaigns, exp: Date.now() + CAMPAIGN_TTL });
+}
+export function invalidateCampaignCache(projectId: string) {
+  campaignsCache.delete(projectId);
+}
+
 // ============== utils ==============
 function sha256(str: string): string {
   return crypto.createHash('sha256').update(str).digest('hex');
@@ -174,10 +205,14 @@ r.get('/assign', async (c) => {
     return c.json({ error: 'invalid_token', shouldRedirect: false }, 401);
   }
 
-  const project = await one<{ id: string; primary_domain: string }>(
-    `SELECT id, primary_domain FROM projects WHERE publishable_token = $1`, [token]
-  );
-  if (!project) return c.json({ error: 'invalid_token', shouldRedirect: false }, 401);
+  let project = getCachedProject(token);
+  if (!project) {
+    project = await one<{ id: string; primary_domain: string }>(
+      `SELECT id, primary_domain FROM projects WHERE publishable_token = $1`, [token]
+    );
+    if (!project) return c.json({ error: 'invalid_token', shouldRedirect: false }, 401);
+    setCachedProject(token, project);
+  }
 
   const ipHash = sha256(clientIP);
   const { device, browser, os } = parseUserAgent(userAgent);
@@ -192,20 +227,25 @@ r.get('/assign', async (c) => {
 
   const ctx = { country: cfCountry, device, browser, os, lang, path, query: originalQuery };
 
-  // Active campaigns (with variants + rules)
-  const { rows: campaigns } = await query<any>(
-    `SELECT c.id, c.sticky_enabled, c.respect_dnt, c.bot_action, c.bot_threshold, c.honeypot_url,
-            c.bot_whitelist_ips, c.bot_whitelist_uas, c.bot_soft_block_delay_ms,
-            COALESCE(
-              (SELECT json_agg(json_build_object('id', v.id, 'destination_url', v.destination_url, 'weight', v.weight, 'is_control', v.is_control))
-               FROM variants v WHERE v.campaign_id = c.id), '[]'::json
-            ) AS variants,
-            (SELECT row_to_json(r) FROM campaign_rules r WHERE r.campaign_id = c.id) AS rules
-     FROM campaigns c
-     WHERE c.project_id = $1 AND c.status = 'active'
-     ORDER BY c.priority DESC, c.created_at DESC`,
-    [project.id]
-  );
+  // Active campaigns (with variants + rules) — cached 15s
+  let campaigns = getCachedCampaigns(project.id);
+  if (!campaigns) {
+    const res = await query<any>(
+      `SELECT c.id, c.sticky_enabled, c.respect_dnt, c.bot_action, c.bot_threshold, c.honeypot_url,
+              c.bot_whitelist_ips, c.bot_whitelist_uas, c.bot_soft_block_delay_ms,
+              COALESCE(
+                (SELECT json_agg(json_build_object('id', v.id, 'destination_url', v.destination_url, 'weight', v.weight, 'is_control', v.is_control))
+                 FROM variants v WHERE v.campaign_id = c.id), '[]'::json
+              ) AS variants,
+              (SELECT row_to_json(r) FROM campaign_rules r WHERE r.campaign_id = c.id) AS rules
+       FROM campaigns c
+       WHERE c.project_id = $1 AND c.status = 'active'
+       ORDER BY c.priority DESC, c.created_at DESC`,
+      [project.id]
+    );
+    campaigns = res.rows;
+    setCachedCampaigns(project.id, campaigns);
+  }
 
   if (!campaigns.length) return c.json({ shouldRedirect: false, reason: 'no_active_campaigns' });
 

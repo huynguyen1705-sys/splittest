@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { query, one } from '../db.js';
 import { requireAuth, getUserId } from '../auth.js';
+import { invalidateCampaignCache } from './collect.js';
 
 const r = new Hono();
 r.use('*', requireAuth);
@@ -71,6 +72,7 @@ r.post('/', async (c) => {
     [d.project_id, d.name, d.status, d.sticky_enabled, d.respect_dnt, d.start_at, d.end_at, d.priority,
      d.bot_action, d.bot_threshold, d.honeypot_url, d.bot_whitelist_ips, d.bot_whitelist_uas, d.bot_challenge_enabled, d.bot_soft_block_delay_ms]
   );
+  invalidateCampaignCache(d.project_id);
   return c.json({ data: row }, 201);
 });
 
@@ -111,6 +113,7 @@ r.patch('/:id', async (c) => {
   if (!fields.length) return c.json({ error: 'no_fields' }, 400);
   values.push(id);
   const row = await one(`UPDATE campaigns SET ${fields.join(', ')} WHERE id = $${i} RETURNING *`, values);
+  invalidateCampaignCache(owned.project_id);
   return c.json({ data: row });
 });
 
@@ -169,6 +172,8 @@ r.patch('/:id/variants/:variantId', async (c) => {
   values.push(variantId, id);
   const row = await one(`UPDATE variants SET ${fields.join(', ')} WHERE id = $${i} AND campaign_id = $${i+1} RETURNING *`, values);
   if (!row) return c.json({ error: 'not_found' }, 404);
+  const owned2 = await userOwnsCampaign(userId, id);
+  if (owned2) invalidateCampaignCache(owned2.project_id);
   return c.json({ data: row });
 });
 
@@ -179,6 +184,8 @@ r.delete('/:id/variants/:variantId', async (c) => {
   if (!(await userOwnsCampaign(userId, id))) return c.json({ error: 'forbidden' }, 403);
   const { rowCount } = await query(`DELETE FROM variants WHERE id = $1 AND campaign_id = $2`, [variantId, id]);
   if (!rowCount) return c.json({ error: 'not_found' }, 404);
+  const owned2 = await userOwnsCampaign(userId, id);
+  if (owned2) invalidateCampaignCache(owned2.project_id);
   return c.json({ ok: true });
 });
 
@@ -222,6 +229,8 @@ r.put('/:id/rules', async (c) => {
      RETURNING *`,
     [id, d.country_in, d.device_in, d.browser_in, d.os_in, d.lang_in, d.include_paths, d.url_match_mode]
   );
+  const owned2 = await userOwnsCampaign(userId, id);
+  if (owned2) invalidateCampaignCache(owned2.project_id);
   return c.json({ data: row });
 });
 
