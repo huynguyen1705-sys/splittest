@@ -295,8 +295,8 @@ export default function CampaignCreate() {
                     <Label>Traffic Weight ({variant.weight}%)</Label>
                     <input
                       type="range"
-                      min="1"
-                      max="99"
+                      min="0"
+                      max="100"
                       value={variant.weight}
                       onChange={(e) => updateVariant(index, 'weight', parseInt(e.target.value))}
                       className="w-full"

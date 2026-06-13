@@ -210,7 +210,7 @@ r.put('/:id/rules', async (c) => {
   const d = parsed.data;
   const row = await one(
     `INSERT INTO campaign_rules (campaign_id, country_in, device_in, browser_in, os_in, lang_in, include_paths, url_match_mode)
-     VALUES ($1, COALESCE($2,'{}'), COALESCE($3,'{}'), COALESCE($4,'{}'), COALESCE($5,'{}'), COALESCE($6,'{}'), COALESCE($7,'{}'), COALESCE($8,'path_prefix'))
+     VALUES ($1, COALESCE($2::text[], '{}'::text[]), COALESCE($3::text[], '{}'::text[]), COALESCE($4::text[], '{}'::text[]), COALESCE($5::text[], '{}'::text[]), COALESCE($6::text[], '{}'::text[]), COALESCE($7::text[], '{}'::text[]), COALESCE($8, 'path_prefix'))
      ON CONFLICT (campaign_id) DO UPDATE SET
        country_in = EXCLUDED.country_in,
        device_in = EXCLUDED.device_in,
