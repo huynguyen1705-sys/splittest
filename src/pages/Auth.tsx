@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { publicApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,6 +21,11 @@ export default function Auth() {
   const [fullName, setFullName] = useState('');
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
+  const [signupEnabled, setSignupEnabled] = useState(true);
+
+  useEffect(() => {
+    publicApi.config().then(c => setSignupEnabled(!!c.signup_enabled)).catch(() => {});
+  }, []);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,10 +69,14 @@ export default function Auth() {
     setIsLoading(false);
 
     if (error) {
-      if (error.message.includes('already registered')) {
+      const msg = error.message || '';
+      if (msg === 'signup_disabled') {
+        toast.error('Signup is currently disabled by the administrator.');
+        setSignupEnabled(false);
+      } else if (msg.includes('already registered') || msg === 'email_taken') {
         toast.error('This email is already registered. Please sign in instead.');
       } else {
-        toast.error(error.message);
+        toast.error(msg);
       }
     } else {
       toast.success('Account created successfully!');
@@ -92,9 +102,9 @@ export default function Auth() {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="signin" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsList className={`grid w-full mb-6 ${signupEnabled ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 <TabsTrigger value="signin">Sign In</TabsTrigger>
-                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+                {signupEnabled && <TabsTrigger value="signup">Sign Up</TabsTrigger>}
               </TabsList>
 
               <TabsContent value="signin">
@@ -135,7 +145,7 @@ export default function Auth() {
                 </form>
               </TabsContent>
 
-              <TabsContent value="signup">
+              {signupEnabled && <TabsContent value="signup">
                 <form onSubmit={handleSignUp} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="signup-name">Full Name</Label>
@@ -185,7 +195,7 @@ export default function Auth() {
                     {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create Account'}
                   </Button>
                 </form>
-              </TabsContent>
+              </TabsContent>}
             </Tabs>
           </CardContent>
         </Card>

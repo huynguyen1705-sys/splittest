@@ -8,6 +8,7 @@ import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
+import AdminSettings from "./pages/AdminSettings";
 import ProjectDetail from "./pages/ProjectDetail";
 import CampaignCreate from "./pages/CampaignCreate";
 import CampaignAnalytics from "./pages/CampaignAnalytics";
@@ -30,6 +31,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/admin/settings" element={<AdminSettings />} />
           <Route path="/project/:id" element={<ProjectDetail />} />
           <Route path="/project/:id/campaign/new" element={<CampaignCreate />} />
           <Route path="/project/:id/campaign/:campaignId" element={<CampaignAnalytics />} />

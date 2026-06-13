@@ -5,7 +5,7 @@ import { useProjects, useCreateProject, useDeleteProject } from '@/hooks/useProj
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, FolderOpen, Globe, LogOut, MoreVertical, Trash2 } from 'lucide-react';
+import { Plus, FolderOpen, Globe, LogOut, MoreVertical, Trash2, Settings } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -98,6 +98,11 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             <span className="text-sm text-muted-foreground hidden sm:inline">{user?.email}</span>
+            {(user as any)?.is_admin && (
+              <Button variant="ghost" size="icon" onClick={() => navigate('/admin/settings')} title="Admin Settings">
+                <Settings className="w-4 h-4" />
+              </Button>
+            )}
             <Button variant="ghost" size="icon" onClick={handleSignOut} title={user?.email}>
               <LogOut className="w-4 h-4" />
             </Button>

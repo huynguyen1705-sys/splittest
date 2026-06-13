@@ -9,6 +9,7 @@ import analyticsRoutes from './routes/analytics.js';
 import collectRoutes from './routes/collect.js';
 import genericRoutes from './routes/generic.js';
 import functionsRoutes from './routes/functions.js';
+import adminRoutes from './routes/admin.js';
 import { startCron } from './cron.js';
 
 const app = new Hono();
@@ -30,6 +31,7 @@ app.route('/analytics', analyticsRoutes);
 app.route('/collect', collectRoutes);
 app.route('/q', genericRoutes);
 app.route('/functions', functionsRoutes);
+app.route('/admin', adminRoutes);
 
 const port = parseInt(process.env.PORT || '3000', 10);
 serve({ fetch: app.fetch, port, hostname: '0.0.0.0' }, (info) => {

@@ -51,7 +51,7 @@ export const api = {
 
 // ---------- Typed helpers ----------
 
-export type User = { id: string; email: string; full_name?: string | null; avatar_url?: string | null; created_at?: string };
+export type User = { id: string; email: string; full_name?: string | null; avatar_url?: string | null; is_admin?: boolean; created_at?: string };
 
 export const authApi = {
   signup: (email: string, password: string, full_name?: string) =>
@@ -90,6 +90,18 @@ export const campaignsApi = {
     get: (campaignId: string) => api.get<{ data: any }>(`/campaigns/${campaignId}/rules`),
     set: (campaignId: string, body: any) => api.put<{ data: any }>(`/campaigns/${campaignId}/rules`, body),
   },
+};
+
+export const publicApi = {
+  config: () => api.get<{ signup_enabled: boolean }>('/auth/public-config'),
+};
+
+export const adminApi = {
+  getSettings: () => api.get<Record<string, any>>('/admin/settings'),
+  setSetting: (key: string, value: any) => api.put<{ ok: true }>(`/admin/settings/${key}`, { value }),
+  listUsers: () => api.get<{ users: any[] }>('/admin/users'),
+  updateUser: (id: string, body: any) => api.patch<{ user: any }>(`/admin/users/${id}`, body),
+  deleteUser: (id: string) => api.delete<{ ok: true }>(`/admin/users/${id}`),
 };
 
 export const analyticsApi = {

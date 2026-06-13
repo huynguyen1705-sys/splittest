@@ -16,7 +16,18 @@ const SignupSchema = z.object({
   full_name: z.string().min(1).max(120).optional(),
 });
 
+// Public: read whether signup is enabled (used by Auth page UI)
+r.get('/public-config', async (c) => {
+  const row = await one<{ value: any }>(`SELECT value FROM app_settings WHERE key = 'signup_enabled'`);
+  const signup_enabled = row ? !!row.value : true;
+  return c.json({ signup_enabled });
+});
+
 r.post('/signup', async (c) => {
+  // Check signup gate first
+  const cfg = await one<{ value: any }>(`SELECT value FROM app_settings WHERE key = 'signup_enabled'`);
+  if (cfg && cfg.value === false) return c.json({ error: 'signup_disabled' }, 403);
+
   const parsed = SignupSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) return c.json({ error: 'invalid_input', details: parsed.error.flatten() }, 400);
   const { email, password, full_name } = parsed.data;
@@ -54,7 +65,7 @@ r.post('/login', async (c) => {
 
 r.get('/me', requireAuth, async (c) => {
   const userId = getUserId(c);
-  const user = await one(`SELECT id, email, full_name, avatar_url, created_at FROM users WHERE id = $1`, [userId]);
+  const user = await one(`SELECT id, email, full_name, avatar_url, is_admin, created_at FROM users WHERE id = $1`, [userId]);
   if (!user) return c.json({ error: 'not_found' }, 404);
   return c.json({ user });
 });
