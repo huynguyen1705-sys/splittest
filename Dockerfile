@@ -1,4 +1,3 @@
-# Frontend Dockerfile — builds Vite + serves via Caddy
 FROM node:22-alpine AS build
 WORKDIR /app
 ENV NPM_CONFIG_PRODUCTION=false
@@ -11,11 +10,5 @@ RUN npm run build
 
 FROM caddy:2-alpine
 COPY --from=build /app/dist /srv
-RUN echo ':80\n\
-root * /srv\n\
-encode gzip zstd\n\
-file_server\n\
-try_files {path} /index.html\n\
-header /assets/* Cache-Control "public, max-age=31536000, immutable"\n\
-' > /etc/caddy/Caddyfile
+COPY Caddyfile /etc/caddy/Caddyfile
 EXPOSE 80
