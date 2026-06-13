@@ -184,13 +184,27 @@ Deno.serve(async (req) => {
         unique_sessions: agg.unique_sessions,
       }));
 
-      // Insert in batches
+      // Delete existing daily rows for the days being compressed (the unique index uses
+      // COALESCE expressions which ON CONFLICT cannot target), then insert fresh.
+      const daysToReplace = Array.from(new Set(dailyRows.map(r => r.day_ts)));
+      if (daysToReplace.length > 0) {
+        const { error: delDailyError } = await supabase
+          .from('aggregates_daily')
+          .delete()
+          .eq('project_id', projectId)
+          .in('day_ts', daysToReplace);
+        if (delDailyError) {
+          console.error('Failed to clear existing daily rows:', delDailyError);
+          throw delDailyError;
+        }
+      }
+
       const batchSize = 500;
       for (let i = 0; i < dailyRows.length; i += batchSize) {
         const batch = dailyRows.slice(i, i + batchSize);
         const { error: insertError } = await supabase
           .from('aggregates_daily')
-          .upsert(batch, { onConflict: 'project_id,campaign_id,day_ts' });
+          .insert(batch);
         if (insertError) {
           console.error('Failed to insert daily batch:', insertError);
           throw insertError;
