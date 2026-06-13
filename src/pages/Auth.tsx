@@ -87,7 +87,7 @@ export default function Auth() {
             <div className="w-12 h-12 gradient-primary rounded-xl flex items-center justify-center mx-auto mb-4">
               <span className="text-2xl font-bold text-primary-foreground">S</span>
             </div>
-            <CardTitle className="text-2xl">Welcome to SplitFlow</CardTitle>
+            <CardTitle className="text-2xl">Welcome to SplitTest</CardTitle>
             <CardDescription>Sign in to manage your split tests</CardDescription>
           </CardHeader>
           <CardContent>

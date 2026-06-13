@@ -94,7 +94,7 @@ export default function Dashboard() {
             <div className="w-8 h-8 gradient-primary rounded-lg flex items-center justify-center">
               <span className="text-lg font-bold text-primary-foreground">S</span>
             </div>
-            <span className="text-lg sm:text-xl font-semibold">SplitFlow</span>
+            <span className="text-lg sm:text-xl font-semibold">SplitTest</span>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             <span className="text-sm text-muted-foreground hidden sm:inline">{user?.email}</span>

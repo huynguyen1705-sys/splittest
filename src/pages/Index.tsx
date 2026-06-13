@@ -12,7 +12,7 @@ export default function Index() {
             <div className="w-8 h-8 gradient-primary rounded-lg flex items-center justify-center">
               <span className="text-lg font-bold text-primary-foreground">S</span>
             </div>
-            <span className="text-xl font-semibold">SplitFlow</span>
+            <span className="text-xl font-semibold">SplitTest</span>
           </div>
           <div className="flex items-center gap-4">
             <Link to="/auth">
@@ -104,9 +104,9 @@ export default function Index() {
             <div className="w-6 h-6 gradient-primary rounded flex items-center justify-center">
               <span className="text-xs font-bold text-primary-foreground">S</span>
             </div>
-            <span className="font-medium">SplitFlow</span>
+            <span className="font-medium">SplitTest</span>
           </div>
-          <p className="text-sm text-muted-foreground">© 2024 SplitFlow. All rights reserved.</p>
+          <p className="text-sm text-muted-foreground">© 2024 SplitTest. All rights reserved.</p>
         </div>
       </footer>
     </div>
