@@ -1,8 +1,9 @@
 # Frontend Dockerfile — builds Vite + serves via Caddy
 FROM node:22-alpine AS build
 WORKDIR /app
+ENV NPM_CONFIG_PRODUCTION=false
 COPY package.json package-lock.json* bun.lockb* ./
-RUN npm install --no-audit --no-fund
+RUN npm install --include=dev --no-audit --no-fund
 COPY . .
 ARG VITE_API_URL=https://api.splittest.app
 ENV VITE_API_URL=$VITE_API_URL
